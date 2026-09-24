@@ -1,0 +1,20 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50:  var(--color-red-50);
+  --color-primary-100: var(--color-red-100);
+  --color-primary-200: var(--color-red-200);
+  --color-primary-300: var(--color-red-300);
+  --color-primary-400: var(--color-red-400);
+  --color-primary-500: var(--color-red-500);
+  --color-primary-600: var(--color-red-600);
+  --color-primary-700: var(--color-red-700);
+  --color-primary-800: var(--color-red-800);
+  --color-primary-900: var(--color-red-900);
+  --color-primary-950: var(--color-red-950);
+
+  --font-jp: "Noto Sans JP", sans-serif;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));

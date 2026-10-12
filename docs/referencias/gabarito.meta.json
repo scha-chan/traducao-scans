@@ -1,0 +1,37 @@
+{
+  "_aviso": "Metadados técnicos do gabarito (não fazem parte do contrato de exportação). BBoxes ESTIMADOS manualmente em px da imagem original; validar com ferramenta de anotação antes de usar em métricas de detecção.",
+  "pagina_01": {
+    "arquivo": "pagina_01.webp",
+    "dimensoes": { "width": 750, "height": 1200 },
+    "divisas_painel_y": [548],
+    "blocos": [
+      { "ordem": 1,  "bbox": { "x": 590, "y": 110,  "width": 50,  "height": 125 }, "orientation": "VERTICAL",   "ruby": [] },
+      { "ordem": 2,  "bbox": { "x": 505, "y": 265,  "width": 40,  "height": 75  }, "orientation": "VERTICAL",   "ruby": [] },
+      { "ordem": 3,  "bbox": { "x": 205, "y": 50,   "width": 265, "height": 80  }, "orientation": "HORIZONTAL", "ruby": [], "lines": ["だれかを", "しあわせにするひと"], "manuscrito": true },
+      { "ordem": 4,  "bbox": { "x": 100, "y": 285,  "width": 95,  "height": 205 }, "orientation": "VERTICAL",   "ruby": [{ "base": "誰", "reading": "だれ" }, { "base": "何", "reading": "なに" }], "lines": ["──誰よりも", "何よりも"] },
+      { "ordem": 5,  "bbox": { "x": 490, "y": 590,  "width": 145, "height": 35  }, "orientation": "HORIZONTAL", "ruby": [] },
+      { "ordem": 6,  "bbox": { "x": 590, "y": 710,  "width": 65,  "height": 105 }, "orientation": "VERTICAL",   "ruby": [], "lines": ["しあわせに", "するん"], "manuscrito": true, "review_status": "NEEDS_REVIEW", "motivo": "último caractere ん ou 人" },
+      { "ordem": 7,  "bbox": { "x": 490, "y": 895,  "width": 145, "height": 35  }, "orientation": "HORIZONTAL", "ruby": [] },
+      { "ordem": 8,  "bbox": { "x": 490, "y": 1148, "width": 145, "height": 34  }, "orientation": "HORIZONTAL", "ruby": [] },
+      { "ordem": 9,  "bbox": { "x": 375, "y": 590,  "width": 95,  "height": 425 }, "orientation": "VERTICAL",   "ruby": [{ "base": "君", "reading": "きみ" }], "lines": ["君の", "おかげだから"] },
+      { "ordem": 10, "bbox": { "x": 65,  "y": 615,  "width": 235, "height": 35  }, "orientation": "HORIZONTAL", "ruby": [] },
+      { "ordem": 11, "bbox": { "x": 65,  "y": 865,  "width": 235, "height": 35  }, "orientation": "HORIZONTAL", "ruby": [] },
+      { "ordem": 12, "bbox": { "x": 65,  "y": 1135, "width": 235, "height": 35  }, "orientation": "HORIZONTAL", "ruby": [] }
+    ],
+    "nao_texto": [
+      { "descricao": "Símbolo 田 desenhado como janela da casa (desenho infantil, inferior direito)", "motivo": "elemento gráfico; falso positivo esperado do detector" },
+      { "descricao": "Traços de raios do sol no desenho de みやた ゆき", "motivo": "elemento gráfico" }
+    ]
+  },
+  "banner_01": {
+    "arquivo": "banner_01.png",
+    "dimensoes": { "width": 750, "height": 166 },
+    "divisas_painel_y": [],
+    "blocos": [
+      { "ordem": 1, "bbox": { "x": 440, "y": 5,  "width": 210, "height": 65 }, "orientation": "HORIZONTAL", "lines": ["上位5名に続く人気", "キャラは誰かな…!?"], "ruby": [{ "base": "上位", "reading": "じょうい" }, { "base": "名", "reading": "めい" }, { "base": "続", "reading": "つづ" }, { "base": "人気", "reading": "にんき" }, { "base": "誰", "reading": "だれ" }] },
+      { "ordem": 2, "bbox": { "x": 240, "y": 10, "width": 195, "height": 60 }, "orientation": "HORIZONTAL", "logo": true, "ruby": [{ "base": "幸福", "reading": "コウフク" }, { "base": "喫茶", "reading": "キッサ" }, { "base": "丁目", "reading": "ちょうめ" }] },
+      { "ordem": 3, "bbox": { "x": 20,  "y": 20, "width": 215, "height": 50 }, "orientation": "HORIZONTAL", "ruby": [{ "base": "連載", "reading": "れんさい" }, { "base": "回", "reading": "かい" }, { "base": "記念企画", "reading": "きねんきかく" }] },
+      { "ordem": 4, "bbox": { "x": 20,  "y": 95, "width": 590, "height": 55 }, "orientation": "HORIZONTAL", "ruby": [{ "base": "結果発表", "reading": "けっかはっぴょう" }] }
+    ]
+  }
+}

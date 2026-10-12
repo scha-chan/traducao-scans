@@ -1,0 +1,42 @@
+[
+  {
+    "ordem": 1,
+    "tipo": "$",
+    "original": "上位5名に続く人気キャラは誰かな…!?",
+    "localizacao": "Topo direita (2 linhas)",
+    "traducoes": [
+      { "traducao": "Quem serão os personagens populares logo depois do Top 5…!?", "observacao": "Chamada editorial. 続く = vir em seguida; かな dá tom de curiosidade/suspense.", "relevancia": 1 },
+      { "traducao": "Quais personagens vêm logo atrás dos 5 primeiros…!?", "observacao": "Variante mais literal de 上位5名.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 2,
+    "tipo": "$",
+    "original": "幸福喫茶3丁目",
+    "localizacao": "Dentro do logo (centro)",
+    "traducoes": [
+      { "traducao": "Koufuku Kissa 3-chōme", "observacao": "Título da obra no logo. Manter romanizado ou usar o título oficial em PT-BR, se existir (entrada de glossário).", "relevancia": 1 },
+      { "traducao": "Café Felicidade, Quadra 3", "observacao": "Tradução literal: 喫茶 = café/cafeteria; 丁目 = número de quadra em endereços japoneses. Não usar como título oficial sem confirmação.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 3,
+    "tipo": "$",
+    "original": "連載50回記念企画♡",
+    "localizacao": "Topo esquerda",
+    "traducoes": [
+      { "traducao": "Especial de 50 capítulos ♡", "observacao": "Texto editorial. 連載 = série publicada em capítulos; 記念企画 = especial comemorativo.", "relevancia": 1 },
+      { "traducao": "Projeto comemorativo da 50ª edição da série ♡", "observacao": "Versão mais literal.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 4,
+    "tipo": "$",
+    "original": "キャラクターコンテスト結果発表!!",
+    "localizacao": "Inferior (grande, largura total)",
+    "traducoes": [
+      { "traducao": "Resultado do Concurso de Personagens!!", "observacao": "Manchete editorial.", "relevancia": 1 },
+      { "traducao": "Anunciado o resultado do concurso de personagens!!", "observacao": "Explicita 発表 (anúncio).", "relevancia": 2 }
+    ]
+  }
+]

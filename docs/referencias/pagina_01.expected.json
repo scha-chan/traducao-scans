@@ -1,0 +1,117 @@
+[
+  {
+    "ordem": 1,
+    "tipo": "#",
+    "original": "きめたよ!",
+    "localizacao": "Topo direita",
+    "traducoes": [
+      { "traducao": "Decidi!", "observacao": "よ dá tom de anúncio/afirmação enfática.", "relevancia": 1 },
+      { "traducao": "Já decidi!", "observacao": "Reforça que a decisão está tomada.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 2,
+    "tipo": "#",
+    "original": "おれも",
+    "localizacao": "Topo centro-direita (abaixo do balão 1)",
+    "traducoes": [
+      { "traducao": "Eu também!", "observacao": "おれ é pronome masculino informal; responde ao balão anterior.", "relevancia": 1 },
+      { "traducao": "Eu também decidi.", "observacao": "Explicita o verbo omitido (きめた).", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 3,
+    "tipo": "$",
+    "original": "だれかをしあわせにするひと",
+    "localizacao": "Dentro do caderno (topo)",
+    "traducoes": [
+      { "traducao": "Alguém que faz outra pessoa feliz", "observacao": "Texto manuscrito no caderno, só em hiragana (letra infantil). Parece uma anotação/resposta escrita; o contexto das páginas anteriores deve confirmar.", "relevancia": 1 },
+      { "traducao": "Uma pessoa que traz felicidade a alguém", "observacao": "Variante mais literal de する人.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 4,
+    "tipo": "$",
+    "original": "──誰よりも何よりも",
+    "localizacao": "Painel superior esquerdo",
+    "traducoes": [
+      { "traducao": "— Mais do que qualquer pessoa, mais do que qualquer coisa", "observacao": "Narração. Paralelismo 誰 (pessoas) / 何 (coisas). O travessão indica continuação na narração do painel inferior (君のおかげだから).", "relevancia": 1 },
+      { "traducao": "— Mais que ninguém, mais que tudo", "observacao": "Versão mais curta e natural para lettering.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 5,
+    "tipo": "$",
+    "original": "とくだ さきこ",
+    "localizacao": "Painel inferior, etiqueta superior direita",
+    "traducoes": [
+      { "traducao": "Tokuda Sakiko", "observacao": "Nome em etiqueta de desenho, escrito em hiragana; ordem japonesa (sobrenome, nome). Não atribuir kanji.", "relevancia": 1 },
+      { "traducao": "Sakiko Tokuda", "observacao": "Ordem ocidental (nome, sobrenome); padronizar para a obra toda.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 6,
+    "tipo": "$",
+    "original": "しあわせにするん",
+    "localizacao": "Dentro do desenho (centro direita)",
+    "traducoes": [
+      { "traducao": "Vou fazer as pessoas felizes", "observacao": "Leitura do OCR: するん (fala coloquial, intenção). Manuscrito infantil dentro do desenho.", "relevancia": 1 },
+      { "traducao": "Alguém que faz os outros felizes", "observacao": "LEITURA INCERTA: o último caractere pode ser 人 (する人), ecoando o texto do caderno (bloco 3). Confirmar na revisão.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 7,
+    "tipo": "$",
+    "original": "あべかわ さくら",
+    "localizacao": "Painel inferior, etiqueta central direita",
+    "traducoes": [
+      { "traducao": "Abekawa Sakura", "observacao": "Nome em etiqueta de desenho, em hiragana; ordem japonesa.", "relevancia": 1 }
+    ]
+  },
+  {
+    "ordem": 8,
+    "tipo": "$",
+    "original": "みやた ゆき",
+    "localizacao": "Painel inferior, etiqueta inferior direita",
+    "traducoes": [
+      { "traducao": "Miyata Yuki", "observacao": "Nome em etiqueta de desenho, em hiragana; ordem japonesa.", "relevancia": 1 }
+    ]
+  },
+  {
+    "ordem": 9,
+    "tipo": "$",
+    "original": "君のおかげだから",
+    "localizacao": "Centro do painel inferior (grande)",
+    "traducoes": [
+      { "traducao": "é graças a você", "observacao": "Narração que conclui o bloco 4: \"— Mais que ninguém, mais que tudo... é graças a você\". 君 (きみ) é um \"você\" afetuoso/próximo.", "relevancia": 1 },
+      { "traducao": "porque foi graças a você", "observacao": "Preserva a nuance causal de だから.", "relevancia": 2 }
+    ]
+  },
+  {
+    "ordem": 10,
+    "tipo": "$",
+    "original": "はせがわ ごうた",
+    "localizacao": "Painel inferior, etiqueta superior esquerda",
+    "traducoes": [
+      { "traducao": "Hasegawa Gōta", "observacao": "Nome em etiqueta de desenho, em hiragana; ordem japonesa. Grafia sem mácron: Gouta.", "relevancia": 1 }
+    ]
+  },
+  {
+    "ordem": 11,
+    "tipo": "$",
+    "original": "にしかわ じろう",
+    "localizacao": "Painel inferior, etiqueta central esquerda",
+    "traducoes": [
+      { "traducao": "Nishikawa Jirō", "observacao": "Nome em etiqueta de desenho, em hiragana; ordem japonesa. Grafia sem mácron: Jirou.", "relevancia": 1 }
+    ]
+  },
+  {
+    "ordem": 12,
+    "tipo": "$",
+    "original": "くぼ りょうじ",
+    "localizacao": "Painel inferior, etiqueta inferior esquerda",
+    "traducoes": [
+      { "traducao": "Kubo Ryōji", "observacao": "Nome em etiqueta de desenho, em hiragana; ordem japonesa. Grafia sem mácron: Ryouji.", "relevancia": 1 }
+    ]
+  }
+]

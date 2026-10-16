@@ -23,8 +23,7 @@ _DT = sa.DateTime(timezone=True)
 
 def upgrade() -> None:
     op.execute(
-        "CREATE TYPE page_status AS ENUM "
-        "('PENDING','PROCESSING','REVIEW','APPROVED','ERROR')"
+        "CREATE TYPE page_status AS ENUM ('PENDING','PROCESSING','REVIEW','APPROVED','ERROR')"
     )
 
     op.create_table(
@@ -49,7 +48,11 @@ def upgrade() -> None:
     )
 
     _page_status_enum = sa.Enum(
-        "PENDING", "PROCESSING", "REVIEW", "APPROVED", "ERROR",
+        "PENDING",
+        "PROCESSING",
+        "REVIEW",
+        "APPROVED",
+        "ERROR",
         name="page_status",
         create_type=False,
     )
@@ -65,8 +68,10 @@ def upgrade() -> None:
         sa.Column("sha256", sa.String(64), nullable=True),
         sa.Column("page_number", sa.Integer(), nullable=False),
         sa.Column(
-            "status", _page_status_enum,
-            nullable=False, server_default="PENDING",
+            "status",
+            _page_status_enum,
+            nullable=False,
+            server_default="PENDING",
         ),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("created_at", _DT, server_default=_NOW, nullable=False),
@@ -102,12 +107,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["page_id"], ["pages.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_character_mentions_character_id", "character_mentions", ["character_id"]
-    )
-    op.create_index(
-        "ix_character_mentions_page_id", "character_mentions", ["page_id"]
-    )
+    op.create_index("ix_character_mentions_character_id", "character_mentions", ["character_id"])
+    op.create_index("ix_character_mentions_page_id", "character_mentions", ["page_id"])
 
 
 def downgrade() -> None:

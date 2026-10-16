@@ -57,9 +57,7 @@ async def get_work(work_id: UUID, db: AsyncSession = Depends(get_db)) -> Work:
 
 
 @router.patch("/{work_id}", response_model=WorkOut)
-async def update_work(
-    work_id: UUID, body: WorkUpdate, db: AsyncSession = Depends(get_db)
-) -> Work:
+async def update_work(work_id: UUID, body: WorkUpdate, db: AsyncSession = Depends(get_db)) -> Work:
     work = await _get_or_404(work_id, db)
     work.title = body.title
     await db.commit()

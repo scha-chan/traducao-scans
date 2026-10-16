@@ -8,9 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 logger = logging.getLogger(__name__)
 
 
-async def http_exception_handler(
-    _request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
+async def http_exception_handler(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"message": exc.detail, "status": exc.status_code}},
@@ -27,9 +25,7 @@ async def validation_exception_handler(
     )
 
 
-async def unhandled_exception_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

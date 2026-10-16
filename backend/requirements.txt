@@ -10,6 +10,9 @@ sqlalchemy[asyncio]==2.0.35
 asyncpg==0.29.0
 alembic==1.13.3
 
+# Image processing
+Pillow==11.0.0
+
 # Queue
 arq==0.26.1
 redis==5.0.8

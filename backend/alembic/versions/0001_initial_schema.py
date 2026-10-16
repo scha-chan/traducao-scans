@@ -17,16 +17,22 @@ down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+_NOW = sa.text("now()")
+_DT = sa.DateTime(timezone=True)
+
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE page_status AS ENUM ('PENDING','PROCESSING','REVIEW','APPROVED','ERROR')")
+    op.execute(
+        "CREATE TYPE page_status AS ENUM "
+        "('PENDING','PROCESSING','REVIEW','APPROVED','ERROR')"
+    )
 
     op.create_table(
         "works",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("title", sa.String(255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("created_at", _DT, server_default=_NOW, nullable=False),
+        sa.Column("updated_at", _DT, server_default=_NOW, nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -35,13 +41,18 @@ def upgrade() -> None:
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("work_id", sa.UUID(), nullable=True),
         sa.Column("name", sa.String(120), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("created_at", _DT, server_default=_NOW, nullable=False),
+        sa.Column("updated_at", _DT, server_default=_NOW, nullable=False),
         sa.ForeignKeyConstraint(["work_id"], ["works.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name", name="uq_folders_name"),
     )
 
+    _page_status_enum = sa.Enum(
+        "PENDING", "PROCESSING", "REVIEW", "APPROVED", "ERROR",
+        name="page_status",
+        create_type=False,
+    )
     op.create_table(
         "pages",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -53,10 +64,13 @@ def upgrade() -> None:
         sa.Column("height", sa.BigInteger(), nullable=True),
         sa.Column("sha256", sa.String(64), nullable=True),
         sa.Column("page_number", sa.Integer(), nullable=False),
-        sa.Column("status", sa.Enum("PENDING", "PROCESSING", "REVIEW", "APPROVED", "ERROR", name="page_status", create_type=False), nullable=False, server_default="PENDING"),
+        sa.Column(
+            "status", _page_status_enum,
+            nullable=False, server_default="PENDING",
+        ),
         sa.Column("error_message", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("created_at", _DT, server_default=_NOW, nullable=False),
+        sa.Column("updated_at", _DT, server_default=_NOW, nullable=False),
         sa.ForeignKeyConstraint(["folder_id"], ["folders.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -72,8 +86,8 @@ def upgrade() -> None:
         sa.Column("gender", sa.String(50), nullable=True),
         sa.Column("speech_register", sa.String(100), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("created_at", _DT, server_default=_NOW, nullable=False),
+        sa.Column("updated_at", _DT, server_default=_NOW, nullable=False),
         sa.ForeignKeyConstraint(["work_id"], ["works.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -88,8 +102,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["page_id"], ["pages.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_character_mentions_character_id", "character_mentions", ["character_id"])
-    op.create_index("ix_character_mentions_page_id", "character_mentions", ["page_id"])
+    op.create_index(
+        "ix_character_mentions_character_id", "character_mentions", ["character_id"]
+    )
+    op.create_index(
+        "ix_character_mentions_page_id", "character_mentions", ["page_id"]
+    )
 
 
 def downgrade() -> None:

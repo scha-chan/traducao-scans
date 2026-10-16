@@ -13,6 +13,9 @@ alembic==1.13.3
 # Image processing
 Pillow==11.0.0
 
+# File upload (multipart/form-data)
+python-multipart==0.0.12
+
 # Queue
 arq==0.26.1
 redis==5.0.8

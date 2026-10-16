@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"
     debug: bool = False
+    upload_dir: str = "uploads"
 
 
 settings = Settings()

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.pages import PageOut
 from app.db.deps import get_db
 from app.db.models import Folder, Page, Work
 from app.settings import settings
@@ -43,21 +44,6 @@ class FolderOut(BaseModel):
     id: UUID
     name: str
     work_id: UUID | None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class PageOut(BaseModel):
-    id: UUID
-    folder_id: UUID
-    file_name: str
-    mime_type: str
-    width: int | None
-    height: int | None
-    page_number: int
-    status: str
     created_at: datetime
     updated_at: datetime
 

@@ -95,17 +95,14 @@ import { UiSkeletonRowsComponent } from '../../shared/ui/ui-skeleton.component';
                     {{ formatDate(folder.updated_at) }}
                   </td>
                   <td class="px-4 py-3">
-                    <div
-                      class="flex items-center justify-end gap-1"
-                      (click)="$event.stopPropagation()"
-                    >
+                    <div class="flex items-center justify-end gap-1">
                       <button
                         class="rounded-md px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        (click)="open(folder)"
+                        (click)="open(folder); $event.stopPropagation()"
                       >Abrir</button>
                       <button
                         class="rounded-md px-2.5 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        (click)="startRename(folder)"
+                        (click)="startRename(folder); $event.stopPropagation()"
                         title="Renomear"
                         aria-label="Renomear {{ folder.name }}"
                       >
@@ -113,7 +110,7 @@ import { UiSkeletonRowsComponent } from '../../shared/ui/ui-skeleton.component';
                       </button>
                       <button
                         class="rounded-md px-2.5 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                        (click)="startDelete(folder)"
+                        (click)="startDelete(folder); $event.stopPropagation()"
                         title="Excluir"
                         aria-label="Excluir {{ folder.name }}"
                       >

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.characters import CharacterCreate, CharacterOut, create_character, list_characters
 from app.db.deps import get_db
-from app.db.models import Work
+from app.db.models import Character, Work
 
 router = APIRouter(prefix="/works", tags=["works"])
 
@@ -74,7 +74,9 @@ async def delete_work(work_id: UUID, db: AsyncSession = Depends(get_db)) -> None
 
 
 @router.get("/{work_id}/characters", response_model=list[CharacterOut], tags=["characters"])
-async def list_work_characters(work_id: UUID, db: AsyncSession = Depends(get_db)) -> list:
+async def list_work_characters(
+    work_id: UUID, db: AsyncSession = Depends(get_db)
+) -> list[Character]:
     return await list_characters(work_id, db)
 
 

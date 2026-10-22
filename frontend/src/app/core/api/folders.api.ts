@@ -17,6 +17,14 @@ export class FoldersApi extends ApiBase {
     return this.http.get<FolderDetail>(this.url(`/api/folders/${id}`));
   }
 
+  rename(id: string, name: string): Observable<FolderSummary> {
+    return this.http.patch<FolderSummary>(this.url(`/api/folders/${id}`), { name });
+  }
+
+  remove(id: string): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/folders/${id}`));
+  }
+
   export(id: string): Observable<FolderExport> {
     return this.http.get<FolderExport>(this.url(`/api/folders/${id}/export`));
   }

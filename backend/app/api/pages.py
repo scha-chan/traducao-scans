@@ -50,9 +50,7 @@ async def get_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Page:
 
 
 @router.patch("/{page_id}", response_model=PageOut)
-async def update_page(
-    page_id: UUID, body: PageUpdate, db: AsyncSession = Depends(get_db)
-) -> Page:
+async def update_page(page_id: UUID, body: PageUpdate, db: AsyncSession = Depends(get_db)) -> Page:
     page = await _get_or_404(page_id, db)
     if body.page_number is not None:
         page.page_number = body.page_number

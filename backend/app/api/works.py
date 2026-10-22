@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.characters import CharacterCreate, CharacterOut, create_character, list_characters
 from app.db.deps import get_db
 from app.db.models import Work
 
@@ -70,3 +71,20 @@ async def delete_work(work_id: UUID, db: AsyncSession = Depends(get_db)) -> None
     work = await _get_or_404(work_id, db)
     await db.delete(work)
     await db.commit()
+
+
+@router.get("/{work_id}/characters", response_model=list[CharacterOut], tags=["characters"])
+async def list_work_characters(work_id: UUID, db: AsyncSession = Depends(get_db)) -> list:
+    return await list_characters(work_id, db)
+
+
+@router.post(
+    "/{work_id}/characters",
+    response_model=CharacterOut,
+    status_code=status.HTTP_201_CREATED,
+    tags=["characters"],
+)
+async def create_work_character(
+    work_id: UUID, body: CharacterCreate, db: AsyncSession = Depends(get_db)
+) -> object:
+    return await create_character(work_id, body, db)

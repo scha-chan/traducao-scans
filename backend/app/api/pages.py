@@ -83,11 +83,11 @@ async def get_thumbnail(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Re
     path = Path(page.file_path)
     if not path.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Arquivo não encontrado")
-    img = Image.open(path)
+    img: Image.Image = Image.open(path)
     w, h = img.size
     if w > _THUMBNAIL_WIDTH:
         new_h = int(h * _THUMBNAIL_WIDTH / w)
-        img = img.resize((_THUMBNAIL_WIDTH, new_h), Image.LANCZOS)
+        img = img.resize((_THUMBNAIL_WIDTH, new_h), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="WEBP", quality=80)
     return Response(content=buf.getvalue(), media_type="image/webp")

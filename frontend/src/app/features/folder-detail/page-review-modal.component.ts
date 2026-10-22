@@ -9,11 +9,11 @@ import {
   input,
   output,
   signal,
+  inject,
 } from '@angular/core';
 import { FolderDetail, PageSummary } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
-import { inject } from '@angular/core';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -21,106 +21,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
   selector: 'app-page-review-modal',
   standalone: true,
   imports: [UiButtonComponent],
-  template: `
-    <!-- Overlay -->
-    <div
-      class="fixed inset-0 z-50 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      [attr.aria-labelledby]="'modal-title-' + page().id"
-      #overlay
-    >
-      <!-- Panel -->
-      <div
-        class="w-[95vw] h-[90dvh] flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden"
-        #panel
-      >
-        <!-- Header -->
-        <div class="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-          <div class="flex items-center gap-2 min-w-0">
-            <p [id]="'modal-title-' + page().id" class="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-              {{ folder().name }} — Página {{ page().page_number }} de {{ folder().pages.length }}
-            </p>
-            <span class="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:block truncate">({{ page().file_name }})</span>
-          </div>
-          <div class="flex items-center gap-1 flex-shrink-0">
-            <button
-              type="button"
-              [disabled]="!hasPrev()"
-              (click)="navigate(-1)"
-              class="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              aria-label="Página anterior"
-            >
-              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-              <span class="hidden sm:inline">Anterior</span>
-            </button>
-            <button
-              type="button"
-              [disabled]="!hasNext()"
-              (click)="navigate(1)"
-              class="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              aria-label="Próxima página"
-            >
-              <span class="hidden sm:inline">Próxima</span>
-              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-            <button
-              type="button"
-              (click)="close()"
-              class="ml-2 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              aria-label="Fechar modal"
-            >
-              <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Body: 40% image | 60% content -->
-        <div class="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-          <!-- Image column -->
-          <div class="lg:basis-2/5 lg:max-w-[40%] min-h-0 overflow-auto bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center">
-            @if (imageLoading()) {
-              <div class="animate-pulse w-full h-full bg-zinc-200 dark:bg-zinc-800"></div>
-            }
-            <img
-              [src]="imageUrl()"
-              [alt]="'Página ' + page().page_number"
-              class="w-full object-contain"
-              [class.hidden]="imageLoading()"
-              (load)="imageLoading.set(false)"
-              (error)="imageLoading.set(false)"
-            />
-          </div>
-
-          <!-- Content column (block table placeholder — FE-16) -->
-          <div class="lg:basis-3/5 min-h-0 overflow-y-auto p-6">
-            <p class="text-sm text-zinc-500 dark:text-zinc-400 italic">
-              Edição de blocos de texto — disponível em FE-16.
-            </p>
-            <div class="mt-4 text-sm text-zinc-400 dark:text-zinc-600 space-y-1">
-              <p>Arquivo: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().file_name }}</span></p>
-              <p>Status: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().status }}</span></p>
-              <p>Blocos: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().block_count }}</span></p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="h-16 flex items-center justify-between px-4 border-t border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-          <span></span>
-          <div class="flex items-center gap-2">
-            <ui-button variant="secondary" (click)="close()">Cancelar</ui-button>
-            <ui-button variant="secondary" [disabled]="true" title="Disponível em FE-22">
-              ↻ Reprocessar
-            </ui-button>
-            <ui-button variant="primary" [disabled]="true" title="Disponível em FE-18">
-              Salvar
-            </ui-button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
+  templateUrl: './page-review-modal.component.html',
+  styleUrl: './page-review-modal.component.scss',
 })
 export class PageReviewModalComponent implements OnInit, OnDestroy {
   private readonly pagesApi = inject(PagesApi);
@@ -145,7 +47,6 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.previousActiveElement = document.activeElement;
     document.body.style.overflow = 'hidden';
-    // Focus first focusable element after render
     setTimeout(() => this.focusFirst(), 0);
   }
 
@@ -175,7 +76,6 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Arrow navigation only when not inside text inputs
     const tag = (e.target as HTMLElement).tagName;
     const isText = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     if (!isText) {
@@ -189,7 +89,6 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Focus trap
     if (e.key === 'Tab') {
       const panel = this.panelRef?.nativeElement;
       if (!panel) return;

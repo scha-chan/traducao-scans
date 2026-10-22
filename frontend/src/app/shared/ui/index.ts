@@ -10,7 +10,8 @@ export { ToastService } from './ui-toast/toast.service';
 export type { Toast, ToastType } from './ui-toast/toast.service';
 export { UiToastOutletComponent } from './ui-toast/ui-toast.component';
 
-export { UiSkeletonComponent, UiSkeletonRowsComponent } from './ui-skeleton.component';
+export { UiSkeletonComponent } from './ui-skeleton.component';
+export { UiSkeletonRowsComponent } from './ui-skeleton-rows.component';
 
 export { UiProgressComponent } from './ui-progress.component';
 

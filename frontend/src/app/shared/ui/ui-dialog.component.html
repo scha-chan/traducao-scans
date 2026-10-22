@@ -1,0 +1,16 @@
+@if (open()) {
+  <div
+    class="fixed inset-0 z-50 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+    role="presentation"
+  >
+    <div
+      #panel
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-labelledby]="labelId"
+      [class]="'relative flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl outline-none ' + panelClass()"
+    >
+      <ng-content />
+    </div>
+  </div>
+}

@@ -8,23 +8,8 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
   selector: 'ui-button',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    <button
-      [type]="type()"
-      [disabled]="disabled() || loading()"
-      [attr.aria-disabled]="(disabled() || loading()) || null"
-      [attr.aria-busy]="loading() || null"
-      [class]="classes()"
-    >
-      @if (loading()) {
-        <svg class="size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
-      }
-      <ng-content />
-    </button>
-  `,
+  templateUrl: './ui-button.component.html',
+  styleUrl: './ui-button.component.scss',
 })
 export class UiButtonComponent {
   readonly variant = input<ButtonVariant>('primary');

@@ -36,3 +36,20 @@ gh project item-list 3 --owner scha-chan --format json \
 ```
 
 Substitua `'CARD'` pelo identificador do card (ex.: `'F1-FE-01'`).
+
+## Estrutura de componentes Angular (frontend)
+
+**Todo componente Angular deve ter três arquivos separados:**
+
+```
+meu-componente.component.ts
+meu-componente.component.html
+meu-componente.component.scss
+```
+
+**Regras:**
+
+- Nunca use `template: \`...\`` inline no decorador `@Component`. Sempre use `templateUrl: './meu-componente.component.html'`.
+- Nunca use `styles: [...]` ou `styleUrls` com CSS puro inline. Sempre use `styleUrl: './meu-componente.component.scss'` (singular, Angular 17+).
+- No arquivo `.html`, evite estilos inline (`style="..."`). Prefira classes Tailwind ou classes definidas no `.scss`.
+- Exceção permitida: utilitários puros sem template visual (services, guards, pipes simples) continuam em arquivo `.ts` único.

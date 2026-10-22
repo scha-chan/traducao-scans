@@ -1,0 +1,24 @@
+<div
+  class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+  aria-live="polite"
+  aria-atomic="false"
+>
+  @for (toast of toastService.toasts(); track toast.id) {
+    <div
+      [class]="'flex items-start gap-3 rounded-lg border px-4 py-3 shadow-lg pointer-events-auto ' + config(toast).classes"
+      role="status"
+    >
+      <span [innerHTML]="config(toast).icon"></span>
+      <p class="flex-1 text-sm font-medium">{{ toast.message }}</p>
+      <button
+        (click)="toastService.dismiss(toast.id)"
+        class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+        aria-label="Fechar notificação"
+      >
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  }
+</div>

@@ -1,0 +1,90 @@
+<div class="mx-auto max-w-2xl px-4 py-12">
+
+  <!-- SELEÇÃO -->
+  @if (appState() === 'selecao') {
+    <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-8">Nova tradução</h1>
+
+    <ui-dropzone (filesSelected)="onFilesSelected($event)" class="mb-6" />
+
+    @if (accepted().length > 0) {
+      <div class="flex flex-col gap-4">
+        <!-- Folder name -->
+        <div class="flex flex-col gap-1.5">
+          <label for="folder-name" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Nome da pasta</label>
+          <input id="folder-name" type="text" [(ngModel)]="folderName" maxlength="120" class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 ring-primary-500" />
+          @if (conflictSuggestion()) {
+            <p class="text-sm text-amber-600 dark:text-amber-400">
+              Nome já existe.
+              <button type="button" (click)="useSuggestion()" class="underline hover:no-underline">Usar "{{ conflictSuggestion() }}"</button>
+            </p>
+          }
+        </div>
+
+        <!-- File summary -->
+        <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 p-4 flex flex-col gap-2">
+          <div class="flex items-center gap-4 text-sm">
+            <span class="text-emerald-600 dark:text-emerald-400">✔ {{ accepted().length }} {{ accepted().length === 1 ? 'imagem encontrada' : 'imagens encontradas' }}</span>
+            @if (ignored().length > 0) {
+              <button type="button" (click)="toggleIgnored()" class="text-amber-600 dark:text-amber-400 hover:underline">⚠ {{ ignored().length }} {{ ignored().length === 1 ? 'arquivo ignorado' : 'arquivos ignorados' }} [ver]</button>
+            }
+          </div>
+
+          @if (showIgnored()) {
+            <ul class="mt-1 max-h-32 overflow-y-auto text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5 pl-2 border-l-2 border-zinc-200 dark:border-zinc-700">
+              @for (f of ignored(); track f.name) {
+                <li><span class="font-mono">{{ f.name }}</span> — {{ f.reason }}</li>
+              }
+            </ul>
+          }
+
+          @if (accepted().length > 200) {
+            <p class="text-sm text-amber-600 dark:text-amber-400">⚠ Pastas grandes podem levar vários minutos.</p>
+          }
+
+          <!-- File list preview -->
+          <ul class="mt-1 max-h-24 overflow-y-auto text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-1">
+            @for (f of accepted().slice(0, 20); track f.pageNumber) {
+              <li class="font-mono">{{ f.file.name }}</li>
+            }
+            @if (accepted().length > 20) {
+              <li>… mais {{ accepted().length - 20 }}</li>
+            }
+          </ul>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-3 pt-2">
+          <ui-button variant="secondary" (click)="cancelSelection()">Cancelar</ui-button>
+          <ui-button variant="primary" [disabled]="!canStart()" (click)="startProcessing()">Iniciar tradução</ui-button>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- PROCESSANDO -->
+  @else if (appState() === 'processando') {
+    <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-8">
+      Traduzindo "{{ folderName }}"
+    </h1>
+
+    <div class="flex flex-col gap-6">
+      <ui-progress [value]="processed()" [max]="total()" [label]="processedLabel()" [sublabel]="timeRemaining()" />
+
+      @if (currentFile()) {
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Processando: {{ currentFile() }}</p>
+      }
+
+      <div class="flex gap-4 text-sm">
+        <span class="text-emerald-600 dark:text-emerald-400">✔ {{ successCount() }} concluídas</span>
+        @if (errorCountProcessing() > 0) {
+          <span class="text-amber-600 dark:text-amber-400">⚠ {{ errorCountProcessing() }} com erro</span>
+        }
+      </div>
+
+      <div class="flex justify-end">
+        <ui-button variant="secondary" (click)="cancelProcessing()">Cancelar processamento</ui-button>
+      </div>
+    </div>
+  }
+
+</div>

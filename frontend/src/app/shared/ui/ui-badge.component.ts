@@ -28,12 +28,8 @@ const STATUS_CONFIG: Record<BadgeStatus, { label: string; classes: string; icon:
 @Component({
   selector: 'ui-badge',
   standalone: true,
-  template: `
-    <span [class]="'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ' + config().classes">
-      <span [innerHTML]="config().icon"></span>
-      {{ config().label }}
-    </span>
-  `,
+  templateUrl: './ui-badge.component.html',
+  styleUrl: './ui-badge.component.scss',
 })
 export class UiBadgeComponent {
   readonly status = input.required<BadgeStatus>();

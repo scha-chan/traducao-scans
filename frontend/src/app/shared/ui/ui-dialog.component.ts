@@ -13,24 +13,8 @@ import { CommonModule } from '@angular/common';
   selector: 'ui-dialog',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    @if (open()) {
-      <div
-        class="fixed inset-0 z-50 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center p-4"
-        role="presentation"
-      >
-        <div
-          #panel
-          role="dialog"
-          aria-modal="true"
-          [attr.aria-labelledby]="labelId"
-          [class]="'relative flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl outline-none ' + panelClass()"
-        >
-          <ng-content />
-        </div>
-      </div>
-    }
-  `,
+  templateUrl: './ui-dialog.component.html',
+  styleUrl: './ui-dialog.component.scss',
 })
 export class UiDialogComponent implements OnDestroy {
   readonly open = input(false);

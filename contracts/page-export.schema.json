@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "TextBlockExport": {
+      "description": "Um bloco de texto detectado na página.",
+      "properties": {
+        "ordem": {
+          "description": "Posição na ordem de leitura, a partir de 1.",
+          "minimum": 1,
+          "title": "Ordem",
+          "type": "integer"
+        },
+        "tipo": {
+          "enum": [
+            "#",
+            "$"
+          ],
+          "title": "Tipo",
+          "type": "string"
+        },
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "localizacao": {
+          "title": "Localizacao",
+          "type": "string"
+        },
+        "traducoes": {
+          "items": {
+            "$ref": "#/$defs/TranslationSuggestionExport"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Traducoes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ordem",
+        "tipo",
+        "original",
+        "localizacao",
+        "traducoes"
+      ],
+      "title": "TextBlockExport",
+      "type": "object"
+    },
+    "TranslationSuggestionExport": {
+      "description": "Uma sugestão de tradução para um bloco de texto.",
+      "examples": [
+        {
+          "observacao": "よ dá tom de anúncio.",
+          "relevancia": 1,
+          "traducao": "Decidi!"
+        }
+      ],
+      "properties": {
+        "traducao": {
+          "title": "Traducao",
+          "type": "string"
+        },
+        "observacao": {
+          "title": "Observacao",
+          "type": "string"
+        },
+        "relevancia": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Relevancia",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "traducao",
+        "observacao",
+        "relevancia"
+      ],
+      "title": "TranslationSuggestionExport",
+      "type": "object"
+    }
+  },
+  "items": {
+    "$ref": "#/$defs/TextBlockExport"
+  },
+  "title": "RootModel[list[TextBlockExport]]",
+  "type": "array"
+}

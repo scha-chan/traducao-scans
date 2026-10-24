@@ -22,6 +22,14 @@ repos:
         files: ^backend/app/
         pass_filenames: false
 
+      - id: contracts-mypy
+        name: mypy (contracts)
+        entry: mypy --config-file contracts/pyproject.toml --ignore-missing-imports contracts
+        language: system
+        types: [python]
+        files: ^contracts/
+        pass_filenames: false
+
   # ESLint + TSC (frontend)
   - repo: local
     hooks:

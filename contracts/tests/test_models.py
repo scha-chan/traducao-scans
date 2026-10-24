@@ -2,18 +2,19 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from contracts.models import PageExport, TextBlockExport, TranslationSuggestionExport
 
-_SUGGESTION = {
+_SUGGESTION: dict[str, Any] = {
     "traducao": "Decidi!",
     "observacao": "よ dá tom enfático.",
     "relevancia": 1,
 }
-_BLOCK = {
+_BLOCK: dict[str, Any] = {
     "ordem": 1,
     "tipo": "#",
     "original": "きめたよ!",
@@ -26,51 +27,55 @@ _BLOCK = {
 
 
 def test_suggestion_valid() -> None:
-    s = TranslationSuggestionExport(**_SUGGESTION)
+    s = TranslationSuggestionExport.model_validate(_SUGGESTION)
     assert s.relevancia == 1
 
 
 def test_suggestion_relevancia_min() -> None:
     with pytest.raises(ValidationError):
-        TranslationSuggestionExport(traducao="x", observacao="", relevancia=0)
+        TranslationSuggestionExport.model_validate(
+            {"traducao": "x", "observacao": "", "relevancia": 0}
+        )
 
 
 def test_suggestion_relevancia_max() -> None:
     with pytest.raises(ValidationError):
-        TranslationSuggestionExport(traducao="x", observacao="", relevancia=6)
+        TranslationSuggestionExport.model_validate(
+            {"traducao": "x", "observacao": "", "relevancia": 6}
+        )
 
 
 # --- TextBlockExport ---
 
 
 def test_block_valid_hash() -> None:
-    b = TextBlockExport(**_BLOCK)
+    b = TextBlockExport.model_validate(_BLOCK)
     assert b.tipo == "#"
 
 
 def test_block_valid_dollar() -> None:
-    b = TextBlockExport(**{**_BLOCK, "tipo": "$"})
+    b = TextBlockExport.model_validate({**_BLOCK, "tipo": "$"})
     assert b.tipo == "$"
 
 
 def test_block_tipo_invalido() -> None:
     with pytest.raises(ValidationError):
-        TextBlockExport(**{**_BLOCK, "tipo": "X"})
+        TextBlockExport.model_validate({**_BLOCK, "tipo": "X"})
 
 
 def test_block_ordem_zero() -> None:
     with pytest.raises(ValidationError):
-        TextBlockExport(**{**_BLOCK, "ordem": 0})
+        TextBlockExport.model_validate({**_BLOCK, "ordem": 0})
 
 
 def test_block_traducoes_vazia() -> None:
     with pytest.raises(ValidationError):
-        TextBlockExport(**{**_BLOCK, "traducoes": []})
+        TextBlockExport.model_validate({**_BLOCK, "traducoes": []})
 
 
 def test_block_traducoes_mais_de_cinco() -> None:
     with pytest.raises(ValidationError):
-        TextBlockExport(**{**_BLOCK, "traducoes": [_SUGGESTION] * 6})
+        TextBlockExport.model_validate({**_BLOCK, "traducoes": [_SUGGESTION] * 6})
 
 
 # --- PageExport ---

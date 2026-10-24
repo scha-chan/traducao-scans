@@ -3,8 +3,12 @@
 # Linting & formatting
 ruff==0.9.10
 
+# Pre-commit hooks
+pre-commit==4.2.0
+
 # Type checking
 mypy==1.15.0
+sqlalchemy[mypy]==2.0.35
 
 # Tests
 pytest==8.3.5

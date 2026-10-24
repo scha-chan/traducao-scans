@@ -73,6 +73,37 @@ ng test --watch=false
 
 O CI (ver `.github/workflows/`) executa todos os checks acima em cada push e bloqueia merges com falha.
 
+## Pre-commit hooks
+
+O repositório usa [pre-commit](https://pre-commit.com) para barrar erros antes do commit:
+
+| Hook | O que verifica |
+|---|---|
+| `ruff lint` | Erros de lint no backend (com auto-fix) |
+| `ruff format` | Formatação do backend |
+| `mypy` | Tipagem estrita do backend |
+| `eslint` | Lint do frontend |
+| `tsc` | Tipagem do frontend |
+
+### Configurar após clonar
+
+```bash
+# 1. Instale as dependências de dev do backend (inclui o pre-commit)
+cd backend
+pip install -r requirements-dev.txt
+cd ..
+
+# 2. Registre os hooks no git local
+pre-commit install
+```
+
+A partir daí, cada `git commit` roda os hooks automaticamente.
+Para rodar manualmente em todos os arquivos:
+
+```bash
+pre-commit run --all-files
+```
+
 ## Documentação
 
 - [PRD](docs/PRD_Agente_Traducao_Manga_Japones.md) — visão de produto, fases e roadmap

@@ -65,9 +65,10 @@ jobs:
 
       - name: Verify schema is up to date
         run: |
+          cd ..
           python -m contracts.generate
-          git diff --exit-code page-export.schema.json || (echo "page-export.schema.json desatualizado — rode python -m contracts.generate" && exit 1)
-        working-directory: ${{ github.workspace }}
+          cd contracts
+          git diff --exit-code -- page-export.schema.json || (echo "page-export.schema.json desatualizado — rode python -m contracts.generate" && exit 1)
 
   frontend:
     name: Frontend — lint, typecheck, tests

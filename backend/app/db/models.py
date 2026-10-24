@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -208,7 +209,7 @@ class ProcessingRun(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    model_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    model_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     page: Mapped["Page"] = relationship(back_populates="processing_runs")
@@ -239,12 +240,12 @@ class TextBlock(Base):
     type: Mapped[str | None] = mapped_column(String(1), nullable=True)
     original: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(Text, nullable=True)
-    bbox: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    lines: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    lines: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     orientation: Mapped[Orientation | None] = mapped_column(
         Enum(Orientation, name="orientation"), nullable=True
     )
-    ruby: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    ruby: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     handwritten: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     review_status: Mapped[ReviewStatus] = mapped_column(

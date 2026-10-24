@@ -5,6 +5,7 @@ import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { FoldersApi } from '../../core/api/folders.api';
 import { FolderSummary } from '../../core/api/models';
+import { buildFolderTxt, downloadTxt, txtFileName } from '../../export/txt-export';
 import { UiBadgeComponent } from '../../shared/ui/ui-badge.component';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
@@ -101,6 +102,15 @@ import { UiSkeletonRowsComponent } from '../../shared/ui/ui-skeleton.component';
                         (click)="open(folder); $event.stopPropagation()"
                       >Abrir</button>
                       <button
+                        class="rounded-md px-2.5 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
+                        [disabled]="isDownloading(folder.id)"
+                        (click)="downloadFolderTxt(folder); $event.stopPropagation()"
+                        title="Baixar TXT"
+                        aria-label="Baixar TXT de {{ folder.name }}"
+                      >
+                        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      </button>
+                      <button
                         class="rounded-md px-2.5 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                         (click)="startRename(folder); $event.stopPropagation()"
                         title="Renomear"
@@ -147,6 +157,14 @@ import { UiSkeletonRowsComponent } from '../../shared/ui/ui-skeleton.component';
                   class="flex-1 rounded-lg px-3 py-1.5 text-sm font-medium text-center text-primary-700 dark:text-primary-300 border border-primary-600 dark:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950 transition-colors"
                   (click)="open(folder)"
                 >Abrir</button>
+                <button
+                  class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
+                  [disabled]="isDownloading(folder.id)"
+                  (click)="downloadFolderTxt(folder)"
+                  aria-label="Baixar TXT de {{ folder.name }}"
+                >
+                  <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
                 <button
                   class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   (click)="startRename(folder)"
@@ -242,6 +260,8 @@ export class FolderListPage implements OnInit {
   readonly deletingFolder = signal<FolderSummary | null>(null);
   readonly deleting = signal(false);
 
+  private readonly downloadingIds = signal<string[]>([]);
+
   private readonly searchSubject = new Subject<string>();
 
   constructor() {
@@ -295,6 +315,26 @@ export class FolderListPage implements OnInit {
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
     return `${day}/${month} ${hh}:${mm}`;
+  }
+
+  // ── Download TXT ───────────────────────────────────────────────────────────
+
+  isDownloading(folderId: string): boolean {
+    return this.downloadingIds().includes(folderId);
+  }
+
+  downloadFolderTxt(folder: FolderSummary): void {
+    if (this.isDownloading(folder.id)) return;
+    this.downloadingIds.update((ids) => [...ids, folder.id]);
+    this.foldersApi.export(folder.id).subscribe({
+      next: (data) => {
+        downloadTxt(buildFolderTxt(data), txtFileName(folder.name));
+        this.downloadingIds.update((ids) => ids.filter((id) => id !== folder.id));
+      },
+      error: () => {
+        this.downloadingIds.update((ids) => ids.filter((id) => id !== folder.id));
+      },
+    });
   }
 
   // ── Rename ─────────────────────────────────────────────────────────────────

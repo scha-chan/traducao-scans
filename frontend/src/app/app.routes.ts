@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { processingGuard } from './features/new-translation/processing.guard';
 
 export const routes: Routes = [
   {
@@ -10,6 +11,7 @@ export const routes: Routes = [
     path: 'nova-traducao',
     loadComponent: () =>
       import('./features/new-translation/new-translation.page').then(m => m.NewTranslationPage),
+    canDeactivate: [processingGuard],
   },
   {
     path: 'pastas/:folderId',

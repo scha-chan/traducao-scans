@@ -38,6 +38,38 @@ jobs:
       - name: Tests (pytest)
         run: pytest
 
+  contracts:
+    name: Contracts — typecheck, tests, schema sync
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r ../backend/requirements-dev.txt
+
+      - name: Type check (mypy)
+        run: mypy . --ignore-missing-imports
+
+      - name: Tests (pytest)
+        run: pytest
+
+      - name: Verify schema is up to date
+        run: |
+          cd ..
+          python -m contracts.generate
+          cd contracts
+          git diff --exit-code -- page-export.schema.json || (echo "page-export.schema.json desatualizado — rode python -m contracts.generate" && exit 1)
+
   frontend:
     name: Frontend — lint, typecheck, tests
     runs-on: ubuntu-latest

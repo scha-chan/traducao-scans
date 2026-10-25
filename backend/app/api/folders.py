@@ -4,15 +4,17 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from contracts.models import TextBlockExport
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.api.pages import PageOut
+from app.api.pages import PageOut, _block_to_export
 from app.db.deps import get_db
-from app.db.models import Folder, Page, Work
+from app.db.models import Folder, Page, TextBlock, Work
 from app.settings import settings
 
 router = APIRouter(prefix="/folders", tags=["folders"])
@@ -187,3 +189,51 @@ async def upload_pages(
     for page in pages:
         await db.refresh(page)
     return pages
+
+
+# ---------------------------------------------------------------------------
+# Exportação
+# ---------------------------------------------------------------------------
+
+
+class PageExportOut(BaseModel):
+    pagina: int
+    arquivo: str
+    status: str
+    blocos: list[TextBlockExport] | None
+
+
+class FolderExportOut(BaseModel):
+    pasta: str
+    paginas: list[PageExportOut]
+
+
+@router.get("/{folder_id}/export", response_model=FolderExportOut)
+async def export_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> FolderExportOut:
+    folder = await _get_or_404(folder_id, db)
+
+    result = await db.execute(
+        select(Page)
+        .where(Page.folder_id == folder_id)
+        .options(selectinload(Page.text_blocks).selectinload(TextBlock.translation_suggestions))
+        .order_by(Page.page_number)
+    )
+    pages = list(result.scalars().all())
+
+    paginas: list[PageExportOut] = []
+    for page in pages:
+        blocos: list[TextBlockExport] | None = None
+        if page.text_blocks:
+            blocos = [
+                _block_to_export(b) for b in sorted(page.text_blocks, key=lambda b: b.order_number)
+            ]
+        paginas.append(
+            PageExportOut(
+                pagina=page.page_number,
+                arquivo=page.file_name,
+                status=page.status.value,
+                blocos=blocos,
+            )
+        )
+
+    return FolderExportOut(pasta=folder.name, paginas=paginas)

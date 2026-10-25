@@ -8,7 +8,7 @@ from contracts.validator import validate_page_export
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -157,6 +157,47 @@ async def save_page_json(
         status_code=status.HTTP_200_OK,
         content=[b.model_dump() for b in body],
     )
+
+
+class BlockOrderIn(BaseModel):
+    block_ids: list[UUID] = Field(..., min_length=1)
+
+
+@router.put("/{page_id}/blocks/order", response_model=list[TextBlockExport])
+async def reorder_blocks(
+    page_id: UUID,
+    body: BlockOrderIn,
+    db: AsyncSession = Depends(get_db),
+) -> list[TextBlockExport]:
+    await _get_or_404(page_id, db)
+
+    result = await db.execute(
+        select(TextBlock)
+        .where(TextBlock.page_id == page_id)
+        .options(selectinload(TextBlock.translation_suggestions))
+    )
+    blocks_by_id = {b.id: b for b in result.scalars().all()}
+
+    if set(body.block_ids) != set(blocks_by_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="block_ids deve conter exatamente os IDs dos blocos da página",
+        )
+
+    # Use temporary values above current range to avoid unique-constraint conflicts
+    n = len(body.block_ids)
+    for i, block_id in enumerate(body.block_ids):
+        blocks_by_id[block_id].order_number = n + 1 + i
+    await db.flush()
+
+    for i, block_id in enumerate(body.block_ids):
+        blocks_by_id[block_id].order_number = i + 1
+    await db.commit()
+
+    ordered = [blocks_by_id[bid] for bid in body.block_ids]
+    for b in ordered:
+        await db.refresh(b)
+    return [_block_to_export(b) for b in ordered]
 
 
 def _block_to_export(block: TextBlock) -> TextBlockExport:

@@ -8,11 +8,11 @@ import {
   computed,
   input,
   output,
-  signal,
 } from '@angular/core';
 import { FolderDetail, PageSummary } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
+import { PageImageViewerComponent } from './page-image-viewer.component';
 import { inject } from '@angular/core';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -20,7 +20,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 @Component({
   selector: 'app-page-review-modal',
   standalone: true,
-  imports: [UiButtonComponent],
+  imports: [UiButtonComponent, PageImageViewerComponent],
   template: `
     <!-- Overlay -->
     <div
@@ -78,17 +78,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
         <!-- Body: 40% image | 60% content -->
         <div class="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
           <!-- Image column -->
-          <div class="lg:basis-2/5 lg:max-w-[40%] min-h-0 overflow-auto bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center">
-            @if (imageLoading()) {
-              <div class="animate-pulse w-full h-full bg-zinc-200 dark:bg-zinc-800"></div>
-            }
-            <img
-              [src]="imageUrl()"
-              [alt]="'Página ' + page().page_number"
-              class="w-full object-contain"
-              [class.hidden]="imageLoading()"
-              (load)="imageLoading.set(false)"
-              (error)="imageLoading.set(false)"
+          <div class="h-[35dvh] lg:h-auto lg:basis-2/5 lg:max-w-[40%] min-h-0">
+            <app-page-image-viewer
+              [imageUrl]="imageUrl()"
+              [altText]="'Página ' + page().page_number"
             />
           </div>
 
@@ -131,7 +124,6 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   readonly closed = output<void>();
   readonly navigated = output<number>();
 
-  readonly imageLoading = signal(true);
 
   @ViewChild('panel') panelRef!: ElementRef<HTMLElement>;
 
@@ -163,7 +155,6 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     const target = current + direction;
     const targetPage = this.folder().pages.find((p) => p.page_number === target);
     if (targetPage) {
-      this.imageLoading.set(true);
       this.navigated.emit(target);
     }
   }

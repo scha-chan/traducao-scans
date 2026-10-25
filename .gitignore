@@ -25,3 +25,4 @@ __pycache__/
 
 # MCP config (pode conter tokens)
 .mcp.json
+contracts/manga_contracts.egg-info/

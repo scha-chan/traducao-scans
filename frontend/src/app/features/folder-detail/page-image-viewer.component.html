@@ -1,0 +1,67 @@
+<div class="image-viewer-wrapper" [class]="cursorClass()">
+
+  <!-- Zoom controls -->
+  <div class="zoom-controls" role="group" aria-label="Controles de zoom">
+    <button
+      type="button"
+      class="zoom-btn"
+      (click)="zoomOut()"
+      [disabled]="zoom() <= ZOOM_MIN"
+      aria-label="Diminuir zoom"
+    >−</button>
+
+    <button
+      type="button"
+      class="zoom-btn zoom-label"
+      (click)="resetZoom()"
+      aria-label="Ajustar zoom"
+      title="Ajustar (100%)"
+    >{{ (zoom() * 100).toFixed(0) }}%</button>
+
+    <button
+      type="button"
+      class="zoom-btn"
+      (click)="zoomIn()"
+      [disabled]="zoom() >= ZOOM_MAX"
+      aria-label="Aumentar zoom"
+    >+</button>
+  </div>
+
+  <!-- Image + SVG overlay -->
+  <div
+    class="image-stage"
+    #container
+    (mousedown)="onMouseDown($event)"
+  >
+    @if (imageLoading()) {
+      <div class="image-skeleton" aria-hidden="true"></div>
+    }
+
+    <div
+      class="image-transform-root"
+      [ngStyle]="{ transform: transform() }"
+    >
+      <img
+        [src]="imageUrl()"
+        [alt]="altText()"
+        class="page-image"
+        [class.hidden]="imageLoading()"
+        draggable="false"
+        (load)="imageLoading.set(false)"
+        (error)="imageLoading.set(false)"
+      />
+
+      <!-- SVG overlay — placeholder para bboxes (fase posterior) -->
+      <svg
+        class="bbox-overlay"
+        aria-hidden="true"
+        [class.hidden]="imageLoading()"
+      >
+        @for (block of blocks(); track block.ordem) {
+          <!-- bbox será renderizado aqui quando o backend fornecer coordenadas (I7) -->
+        }
+      </svg>
+    </div>
+  </div>
+
+</div>

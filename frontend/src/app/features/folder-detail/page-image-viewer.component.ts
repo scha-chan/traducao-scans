@@ -29,8 +29,9 @@ export class PageImageViewerComponent implements OnDestroy {
 
   readonly imageUrl = input.required<string>();
   readonly altText = input<string>('Página');
-  /** Blocos passados para o overlay SVG (fase posterior — bbox). */
   readonly blocks = input<TextBlockExport[]>([]);
+  /** Índice selecionado na lista (seleção bidirecional — bbox quando disponível). */
+  readonly selectedBlockIndex = input<number | null>(null);
 
   readonly imageLoading = signal(true);
   readonly zoom = signal(1);

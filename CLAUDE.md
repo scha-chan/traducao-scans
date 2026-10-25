@@ -36,3 +36,17 @@ gh project item-list 3 --owner scha-chan --format json \
 ```
 
 Substitua `'CARD'` pelo identificador do card (ex.: `'F1-FE-01'`).
+
+## Pull Requests
+
+### Critérios de aceite na descrição
+
+**Ao abrir uma PR**, busque os critérios de aceite do card correspondente na especificação (`docs/FRONTEND_Especificacao.md`) e inclua-os na descrição, numa seção chamada **"Critérios de aceite"**. Liste cada critério como checkbox:
+
+```markdown
+## Critérios de aceite
+- [ ] Critério 1
+- [ ] Critério 2
+```
+
+Para localizar os critérios, pesquise pelo identificador do card (ex.: `F2-BE-03`) ou pelo título da entrega na especificação. Se não houver critérios explícitos no spec, derive-os das regras funcionais descritas para aquele card.

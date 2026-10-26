@@ -8,19 +8,21 @@ import {
   computed,
   input,
   output,
+  signal,
+  inject,
 } from '@angular/core';
-import { FolderDetail, PageSummary } from '../../core/api/models';
+import { FolderDetail, PageSummary, TextBlockExport } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { PageImageViewerComponent } from './page-image-viewer.component';
-import { inject } from '@angular/core';
+import { BlockTableComponent } from './block-table.component';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 @Component({
   selector: 'app-page-review-modal',
   standalone: true,
-  imports: [UiButtonComponent, PageImageViewerComponent],
+  imports: [UiButtonComponent, PageImageViewerComponent, BlockTableComponent],
   template: `
     <!-- Overlay -->
     <div
@@ -82,19 +84,24 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
             <app-page-image-viewer
               [imageUrl]="imageUrl()"
               [altText]="'Página ' + page().page_number"
+              [blocks]="blocks()"
+              [selectedBlockIndex]="selectedBlockIndex()"
             />
           </div>
 
-          <!-- Content column (block table placeholder — FE-16) -->
-          <div class="lg:basis-3/5 min-h-0 overflow-y-auto p-6">
-            <p class="text-sm text-zinc-500 dark:text-zinc-400 italic">
-              Edição de blocos de texto — disponível em FE-16.
-            </p>
-            <div class="mt-4 text-sm text-zinc-400 dark:text-zinc-600 space-y-1">
-              <p>Arquivo: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().file_name }}</span></p>
-              <p>Status: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().status }}</span></p>
-              <p>Blocos: <span class="font-mono text-zinc-600 dark:text-zinc-400">{{ page().block_count }}</span></p>
-            </div>
+          <!-- Content column: block table -->
+          <div class="lg:basis-3/5 min-h-0 overflow-y-auto flex flex-col">
+            @if (blocksError()) {
+              <div class="p-4 text-sm text-red-600 dark:text-red-400">
+                Não foi possível carregar os blocos.
+                <button type="button" class="underline ml-1" (click)="loadBlocks()">Tentar novamente</button>
+              </div>
+            }
+            <app-block-table
+              [blocks]="blocks()"
+              [loading]="blocksLoading()"
+              (selectedIndexChange)="onBlockSelected($event)"
+            />
           </div>
         </div>
 
@@ -132,18 +139,45 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
 
   readonly imageUrl = computed(() => this.pagesApi.imageUrl(this.page()));
 
+  readonly blocks = signal<TextBlockExport[]>([]);
+  readonly blocksLoading = signal(false);
+  readonly blocksError = signal(false);
+  readonly selectedBlockIndex = signal<number | null>(null);
+
+  private blocksSub?: import('rxjs').Subscription;
   private previousActiveElement: Element | null = null;
 
   ngOnInit() {
     this.previousActiveElement = document.activeElement;
     document.body.style.overflow = 'hidden';
-    // Focus first focusable element after render
     setTimeout(() => this.focusFirst(), 0);
+    this.loadBlocks();
   }
 
   ngOnDestroy() {
     document.body.style.overflow = '';
+    this.blocksSub?.unsubscribe();
     (this.previousActiveElement as HTMLElement | null)?.focus();
+  }
+
+  loadBlocks() {
+    this.blocksLoading.set(true);
+    this.blocksError.set(false);
+    this.blocksSub?.unsubscribe();
+    this.blocksSub = this.pagesApi.getJson(this.page().id).subscribe({
+      next: (data) => {
+        this.blocks.set(data);
+        this.blocksLoading.set(false);
+      },
+      error: () => {
+        this.blocksError.set(true);
+        this.blocksLoading.set(false);
+      },
+    });
+  }
+
+  onBlockSelected(index: number | null) {
+    this.selectedBlockIndex.set(index);
   }
 
   close() {

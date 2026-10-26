@@ -244,6 +244,52 @@ export class BlockTableComponent implements OnChanges {
     sorted.forEach((v, idx) => fa.at(idx).setValue(v as never, { emitEvent: false }));
   }
 
+  // ── Dirty / server errors ──────────────────────────────────────────────────
+
+  get isDirty(): boolean {
+    return this.form.dirty;
+  }
+
+  markAsPristine() {
+    this.form.markAsPristine();
+  }
+
+  setServerErrors(errors: Record<string, string>) {
+    for (const [path, message] of Object.entries(errors)) {
+      const blockMatch = path.match(/^\[(\d+)\]\.(.+)$/);
+      if (blockMatch) {
+        const idx = parseInt(blockMatch[1], 10);
+        const field = blockMatch[2];
+        const blockGroup = this.form.at(idx) as FormGroup<BlockForm> | undefined;
+        if (!blockGroup) continue;
+        const translationMatch = field.match(/^traducoes\[(\d+)\]\.(.+)$/);
+        if (translationMatch) {
+          const tIdx = parseInt(translationMatch[1], 10);
+          const tField = translationMatch[2] as keyof TranslationForm;
+          const ctrl = blockGroup.controls.traducoes.at(tIdx)?.controls[tField];
+          ctrl?.setErrors({ serverError: message });
+        } else {
+          const ctrl = blockGroup.controls[field as keyof BlockForm];
+          (ctrl as FormControl | undefined)?.setErrors({ serverError: message });
+        }
+      }
+    }
+  }
+
+  clearServerErrors() {
+    this.form.controls.forEach((g) => {
+      const bg = g as FormGroup<BlockForm>;
+      (['tipo', 'original', 'localizacao'] as const).forEach((f) => {
+        if (bg.controls[f].hasError('serverError')) bg.controls[f].setErrors(null);
+      });
+      bg.controls.traducoes.controls.forEach((tg) => {
+        (['traducao', 'observacao', 'relevancia'] as const).forEach((f) => {
+          if (tg.controls[f].hasError('serverError')) tg.controls[f].setErrors(null);
+        });
+      });
+    });
+  }
+
   // ── Serialise ──────────────────────────────────────────────────────────────
 
   toTextBlocks(): TextBlockExport[] {

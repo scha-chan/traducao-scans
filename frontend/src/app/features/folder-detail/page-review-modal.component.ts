@@ -55,7 +55,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
             role="alert"
             aria-live="assertive"
           >
-            Erro ao salvar — tente novamente.
+            {{ saveErrorMessage() }}
           </div>
         }
 
@@ -142,13 +142,39 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
             <ui-button variant="secondary" [disabled]="true" title="Disponível em FE-22">
               ↻ Reprocessar
             </ui-button>
-            <ui-button variant="primary" [disabled]="saving()" (click)="save()">
+            <ui-button variant="primary" [disabled]="saving()" (click)="save()" [title]="'Salvar (Ctrl+S)'">
+              @if (blockTable?.isDirty && !saving()) {
+                <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 -mt-px" aria-hidden="true"></span>
+              }
               {{ saving() ? 'Salvando…' : 'Salvar' }}
             </ui-button>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Unsaved changes confirmation dialog -->
+    @if (unsavedDialogOpen()) {
+      <div
+        class="fixed inset-0 z-[60] bg-zinc-950/60 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="unsaved-dialog-title"
+      >
+        <div class="w-full max-w-sm rounded-xl bg-white dark:bg-zinc-900 shadow-2xl p-6">
+          <h2 id="unsaved-dialog-title" class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            Alterações não salvas
+          </h2>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+            Você tem alterações não salvas nesta página. Deseja sair mesmo assim?
+          </p>
+          <div class="flex justify-end gap-2 mt-5">
+            <ui-button variant="secondary" (click)="cancelDiscard()">Continuar editando</ui-button>
+            <ui-button variant="destructive" (click)="confirmDiscard()">Sair sem salvar</ui-button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class PageReviewModalComponent implements OnInit, OnDestroy {
@@ -180,7 +206,11 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
 
   readonly saving = signal(false);
   readonly saveError = signal(false);
+  readonly saveErrorMessage = signal('');
   private saveErrorTimeout?: ReturnType<typeof setTimeout>;
+
+  readonly unsavedDialogOpen = signal(false);
+  private pendingAction = signal<(() => void) | null>(null);
 
   private blocksSub?: import('rxjs').Subscription;
   private saveSub?: import('rxjs').Subscription;
@@ -222,20 +252,50 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     if (this.saving()) return;
     this.saving.set(true);
     this.saveError.set(false);
+    this.blockTable.clearServerErrors();
     this.saveSub?.unsubscribe();
     this.saveSub = this.pagesApi
       .saveJson(this.page().id, this.blockTable.toTextBlocks())
       .subscribe({
         next: () => {
           this.saving.set(false);
+          this.blockTable.markAsPristine();
         },
-        error: () => {
+        error: (err) => {
           this.saving.set(false);
+          const body = err?.error;
+          if (err?.status === 422 && body?.error?.details) {
+            this.blockTable.setServerErrors(body.error.details);
+            this.saveErrorMessage.set(body.error.message ?? 'Dados inválidos');
+          } else {
+            this.saveErrorMessage.set('Erro ao salvar — tente novamente.');
+          }
           this.saveError.set(true);
           clearTimeout(this.saveErrorTimeout);
           this.saveErrorTimeout = setTimeout(() => this.saveError.set(false), 4000);
         },
       });
+  }
+
+  private guardUnsaved(action: () => void) {
+    if (this.blockTable?.isDirty) {
+      this.pendingAction.set(action);
+      this.unsavedDialogOpen.set(true);
+    } else {
+      action();
+    }
+  }
+
+  confirmDiscard() {
+    this.unsavedDialogOpen.set(false);
+    const action = this.pendingAction();
+    this.pendingAction.set(null);
+    action?.();
+  }
+
+  cancelDiscard() {
+    this.unsavedDialogOpen.set(false);
+    this.pendingAction.set(null);
   }
 
   onBlockSelected(index: number | null) {
@@ -253,7 +313,7 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   }
 
   close() {
-    this.closed.emit();
+    this.guardUnsaved(() => this.closed.emit());
   }
 
   navigate(direction: -1 | 1) {
@@ -261,12 +321,18 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     const target = current + direction;
     const targetPage = this.folder().pages.find((p) => p.page_number === target);
     if (targetPage) {
-      this.navigated.emit(target);
+      this.guardUnsaved(() => this.navigated.emit(target));
     }
   }
 
   @HostListener('keydown', ['$event'])
   onKeyDown(e: KeyboardEvent) {
+    if (e.ctrlKey && e.key === 's') {
+      e.preventDefault();
+      this.save();
+      return;
+    }
+
     if (e.key === 'Escape') {
       if (this.viewerDrawMode()) return;
       this.close();

@@ -104,7 +104,7 @@ export class BlockTableComponent implements OnChanges {
     return this.fb.group<TranslationForm>({
       traducao: this.fb.control(t?.traducao ?? '', Validators.required),
       observacao: this.fb.control(t?.observacao ?? ''),
-      relevancia: this.fb.control<1 | 2 | 3 | 4 | 5>(t?.relevancia ?? 1),
+      relevancia: this.fb.control<1 | 2 | 3 | 4 | 5>((t?.relevancia ?? 1) as 1 | 2 | 3 | 4 | 5),
     });
   }
 

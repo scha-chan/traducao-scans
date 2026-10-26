@@ -1,14 +1,18 @@
-// Modelos gerados a partir do contrato da seção 10.1 da especificação
+// Tipos do contrato importados do arquivo gerado a partir de contracts/page-export.schema.json.
+// Não altere TranslationSuggestionExport aqui — edite o modelo Pydantic em contracts/models.py.
+export type {
+  TranslationSuggestionExport,
+  RootModelListTextBlockExport as PageBlocks,
+} from './contracts';
+import type {
+  TextBlockExport as ContractTextBlock,
+  TranslationSuggestionExport,
+} from './contracts';
 
-export type PageStatus = 'PENDING' | 'PROCESSING' | 'REVIEW' | 'APPROVED' | 'ERROR';
-export type FolderStatus = 'PROCESSING' | 'DONE' | 'DONE_WITH_ERRORS' | 'INCOMPLETE';
+// Alias de compatibilidade: o código Angular usa o nome "Translation".
+export type Translation = TranslationSuggestionExport;
 
-export interface Translation {
-  traducao: string;
-  observacao: string;
-  relevancia: 1 | 2 | 3 | 4 | 5;
-}
-
+// Extensão frontend-only: bbox em pixels para o overlay SVG (não faz parte do schema da API).
 export interface BboxPx {
   x: number;
   y: number;
@@ -16,14 +20,13 @@ export interface BboxPx {
   h: number;
 }
 
-export interface TextBlockExport {
-  ordem: number;
-  tipo: '#' | '$';
-  original: string;
-  localizacao: string;
-  traducoes: Translation[];
+// TextBlockExport estende o contrato gerado com o campo opcional de bounding-box.
+export interface TextBlockExport extends ContractTextBlock {
   bbox?: BboxPx;
 }
+
+export type PageStatus = 'PENDING' | 'PROCESSING' | 'REVIEW' | 'APPROVED' | 'ERROR';
+export type FolderStatus = 'PROCESSING' | 'DONE' | 'DONE_WITH_ERRORS' | 'INCOMPLETE';
 
 export interface FolderSummary {
   id: string;

@@ -11,8 +11,9 @@ import {
   signal,
   inject,
 } from '@angular/core';
-import { BboxPx, FolderDetail, PageSummary, TextBlockExport } from '../../core/api/models';
+import { BboxPx, FolderDetail, PageExport, PageSummary, TextBlockExport } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
+import { buildPageLines } from '../../export/txt-export';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { PageImageViewerComponent } from './page-image-viewer.component';
 import { BlockTableComponent } from './block-table.component';
@@ -114,21 +115,79 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
             />
           </div>
 
-          <!-- Content column: compact list + detail panel -->
-          <div class="lg:basis-3/5 min-h-0 flex overflow-hidden">
-            @if (blocksError()) {
-              <div class="p-4 text-sm text-red-600 dark:text-red-400 flex-1">
-                Não foi possível carregar os blocos.
-                <button type="button" class="underline ml-1" (click)="loadBlocks()">Tentar novamente</button>
-              </div>
-            }
-            @else {
-              <app-block-table
-                [blocks]="blocks()"
-                [loading]="blocksLoading()"
-                (selectedIndexChange)="onBlockSelected($event)"
-              />
-            }
+          <!-- Content column: tabs + block table or preview -->
+          <div class="lg:basis-3/5 min-h-0 flex flex-col overflow-hidden border-l border-zinc-200 dark:border-zinc-700">
+            <!-- Tab bar -->
+            <div class="flex flex-shrink-0 border-b border-zinc-200 dark:border-zinc-700 px-2 pt-1 gap-1" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                [attr.aria-selected]="activeTab() === 'edit'"
+                [attr.aria-controls]="'tab-edit-' + page().id"
+                class="px-3 py-1.5 text-xs font-medium rounded-t transition-colors focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-1"
+                [class.text-primary-700]="activeTab() === 'edit'"
+                [class.dark:text-primary-300]="activeTab() === 'edit'"
+                [class.border-b-2]="activeTab() === 'edit'"
+                [class.border-primary-500]="activeTab() === 'edit'"
+                [class.text-zinc-500]="activeTab() !== 'edit'"
+                [class.hover:text-zinc-700]="activeTab() !== 'edit'"
+                [class.dark:text-zinc-400]="activeTab() !== 'edit'"
+                [class.dark:hover:text-zinc-200]="activeTab() !== 'edit'"
+                (click)="setTab('edit')"
+              >Editar</button>
+              <button
+                type="button"
+                role="tab"
+                [attr.aria-selected]="activeTab() === 'preview'"
+                [attr.aria-controls]="'tab-preview-' + page().id"
+                class="px-3 py-1.5 text-xs font-medium rounded-t transition-colors focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-1"
+                [class.text-primary-700]="activeTab() === 'preview'"
+                [class.dark:text-primary-300]="activeTab() === 'preview'"
+                [class.border-b-2]="activeTab() === 'preview'"
+                [class.border-primary-500]="activeTab() === 'preview'"
+                [class.text-zinc-500]="activeTab() !== 'preview'"
+                [class.hover:text-zinc-700]="activeTab() !== 'preview'"
+                [class.dark:text-zinc-400]="activeTab() !== 'preview'"
+                [class.dark:hover:text-zinc-200]="activeTab() !== 'preview'"
+                (click)="setTab('preview')"
+              >Pré-visualizar texto</button>
+            </div>
+
+            <!-- Edit tab -->
+            <div
+              [id]="'tab-edit-' + page().id"
+              role="tabpanel"
+              class="flex-1 min-h-0 flex overflow-hidden"
+              [class.hidden]="activeTab() !== 'edit'"
+            >
+              @if (blocksError()) {
+                <div class="p-4 text-sm text-red-600 dark:text-red-400 flex-1">
+                  Não foi possível carregar os blocos.
+                  <button type="button" class="underline ml-1" (click)="loadBlocks()">Tentar novamente</button>
+                </div>
+              }
+              @else {
+                <app-block-table
+                  [blocks]="blocks()"
+                  [loading]="blocksLoading()"
+                  (selectedIndexChange)="onBlockSelected($event)"
+                />
+              }
+            </div>
+
+            <!-- Preview tab -->
+            <div
+              [id]="'tab-preview-' + page().id"
+              role="tabpanel"
+              class="flex-1 min-h-0 overflow-y-auto p-4"
+              [class.hidden]="activeTab() !== 'preview'"
+            >
+              @if (previewLines().length === 0) {
+                <p class="text-xs text-zinc-400 dark:text-zinc-600 italic">Nenhum conteúdo para pré-visualizar.</p>
+              } @else {
+                <pre class="text-xs font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">{{ previewLines().join('\n') }}</pre>
+              }
+            </div>
           </div>
         </div>
 
@@ -212,6 +271,9 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   readonly unsavedDialogOpen = signal(false);
   private pendingAction = signal<(() => void) | null>(null);
 
+  readonly activeTab = signal<'edit' | 'preview'>('edit');
+  readonly previewLines = signal<string[]>([]);
+
   private blocksSub?: import('rxjs').Subscription;
   private saveSub?: import('rxjs').Subscription;
   private previousActiveElement: Element | null = null;
@@ -233,6 +295,8 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   }
 
   loadBlocks() {
+    this.activeTab.set('edit');
+    this.previewLines.set([]);
     this.blocksLoading.set(true);
     this.blocksError.set(false);
     this.blocksSub?.unsubscribe();
@@ -296,6 +360,24 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   cancelDiscard() {
     this.unsavedDialogOpen.set(false);
     this.pendingAction.set(null);
+  }
+
+  setTab(tab: 'edit' | 'preview') {
+    this.activeTab.set(tab);
+    if (tab === 'preview') {
+      this.refreshPreview();
+    }
+  }
+
+  private refreshPreview() {
+    const blocks = this.blockTable?.toTextBlocks() ?? [];
+    const pageExport: PageExport = {
+      pagina: this.page().page_number,
+      arquivo: this.page().file_name,
+      status: 'REVIEW',
+      blocos: blocks,
+    };
+    this.previewLines.set(buildPageLines(pageExport));
   }
 
   onBlockSelected(index: number | null) {

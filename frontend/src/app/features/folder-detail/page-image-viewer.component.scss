@@ -111,6 +111,67 @@
   pointer-events: none;
 }
 
+// Divider between zoom controls and draw button
+.zoom-divider {
+  width: 1px;
+  height: 1.125rem;
+  background: var(--color-zinc-200, #e4e4e7);
+  margin: 0 0.125rem;
+
+  :host-context(.dark) & {
+    background: var(--color-zinc-700, #3f3f46);
+  }
+}
+
+// Draw mode toggle button
+.draw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+
+  &--active {
+    background: var(--color-primary-50, #fff1f2) !important;
+    border-color: var(--color-primary-600, #e11d48) !important;
+    color: var(--color-primary-700, #be123c) !important;
+
+    :host-context(.dark) & {
+      background: var(--color-primary-950, #4c0519) !important;
+      border-color: var(--color-primary-400, #fb7185) !important;
+      color: var(--color-primary-300, #fda4af) !important;
+    }
+  }
+}
+
+.draw-btn-label {
+  font-size: 0.75rem;
+}
+
+// Draw mode hint bar
+.draw-hint {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-primary-700, #be123c);
+  background: var(--color-primary-50, #fff1f2);
+  border-top: 1px solid var(--color-primary-200, #fecdd3);
+  text-align: center;
+  flex-shrink: 0;
+
+  kbd {
+    display: inline-block;
+    padding: 0 0.3rem;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    line-height: 1.4;
+  }
+
+  :host-context(.dark) & {
+    color: var(--color-primary-300, #fda4af);
+    background: var(--color-primary-950, #4c0519);
+    border-color: var(--color-primary-900, #881337);
+  }
+}
+
 // Drag cursor variants
 .cursor-grab {
   cursor: grab;
@@ -118,6 +179,10 @@
 
 .cursor-grabbing {
   cursor: grabbing;
+}
+
+.cursor-crosshair {
+  cursor: crosshair;
 }
 
 // Skeleton pulse while loading

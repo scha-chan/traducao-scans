@@ -9,12 +9,20 @@ export interface Translation {
   relevancia: 1 | 2 | 3 | 4 | 5;
 }
 
+export interface BboxPx {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface TextBlockExport {
   ordem: number;
   tipo: '#' | '$';
   original: string;
   localizacao: string;
   traducoes: Translation[];
+  bbox?: BboxPx;
 }
 
 export interface FolderSummary {

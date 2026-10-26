@@ -6,15 +6,17 @@ import {
   ViewChild,
   computed,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { NgStyle } from '@angular/common';
-import { TextBlockExport } from '../../core/api/models';
+import { BboxPx, TextBlockExport } from '../../core/api/models';
 
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 8;
 const ZOOM_STEP = 0.25;
 const ZOOM_WHEEL_FACTOR = 0.001;
+const MIN_DRAW_PX = 10;
 
 @Component({
   selector: 'app-page-image-viewer',
@@ -30,14 +32,22 @@ export class PageImageViewerComponent implements OnDestroy {
   readonly imageUrl = input.required<string>();
   readonly altText = input<string>('Página');
   readonly blocks = input<TextBlockExport[]>([]);
-  /** Índice selecionado na lista (seleção bidirecional — bbox quando disponível). */
   readonly selectedBlockIndex = input<number | null>(null);
+
+  readonly regionDrawn = output<BboxPx>();
+  readonly regionTooSmall = output<void>();
+  readonly drawModeChange = output<boolean>();
 
   readonly imageLoading = signal(true);
   readonly zoom = signal(1);
   readonly panX = signal(0);
   readonly panY = signal(0);
 
+  readonly drawModeActive = signal(false);
+  readonly isDrawing = signal(false);
+  readonly drawPreviewRect = signal<BboxPx | null>(null);
+
+  private drawStartSvg = {x: 0, y: 0};
   private isDragging = false;
   private dragStartX = 0;
   private dragStartY = 0;
@@ -45,6 +55,7 @@ export class PageImageViewerComponent implements OnDestroy {
   private dragStartPanY = 0;
 
   @ViewChild('container') containerRef!: ElementRef<HTMLElement>;
+  @ViewChild('pageImage') imageRef!: ElementRef<HTMLImageElement>;
 
   readonly transform = computed(
     () =>
@@ -52,9 +63,22 @@ export class PageImageViewerComponent implements OnDestroy {
   );
 
   readonly cursorClass = computed(() => {
+    if (this.drawModeActive()) return 'cursor-crosshair';
     if (this.zoom() <= 1) return 'cursor-default';
     return this.isDragging ? 'cursor-grabbing' : 'cursor-grab';
   });
+
+  // -------------------------------------------------------------------------
+  // Draw mode
+  // -------------------------------------------------------------------------
+
+  toggleDrawMode() {
+    const next = !this.drawModeActive();
+    this.drawModeActive.set(next);
+    this.isDrawing.set(false);
+    this.drawPreviewRect.set(null);
+    this.drawModeChange.emit(next);
+  }
 
   // -------------------------------------------------------------------------
   // Zoom controls
@@ -96,10 +120,34 @@ export class PageImageViewerComponent implements OnDestroy {
   }
 
   // -------------------------------------------------------------------------
-  // Pan (drag)
+  // Escape: cancel draw mode
+  // -------------------------------------------------------------------------
+
+  @HostListener('document:keydown', ['$event'])
+  onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && this.drawModeActive()) {
+      e.stopPropagation();
+      this.drawModeActive.set(false);
+      this.isDrawing.set(false);
+      this.drawPreviewRect.set(null);
+      this.drawModeChange.emit(false);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Mouse: draw or pan
   // -------------------------------------------------------------------------
 
   onMouseDown(e: MouseEvent) {
+    if (this.drawModeActive()) {
+      const svgPos = this.clientToSvgCoords(e.clientX, e.clientY);
+      if (!svgPos) return;
+      this.isDrawing.set(true);
+      this.drawStartSvg = svgPos;
+      this.drawPreviewRect.set({x: svgPos.x, y: svgPos.y, w: 0, h: 0});
+      e.preventDefault();
+      return;
+    }
     if (this.zoom() <= 1) return;
     this.isDragging = true;
     this.dragStartX = e.clientX;
@@ -111,6 +159,16 @@ export class PageImageViewerComponent implements OnDestroy {
 
   @HostListener('document:mousemove', ['$event'])
   onMouseMove(e: MouseEvent) {
+    if (this.drawModeActive() && this.isDrawing()) {
+      const svgPos = this.clientToSvgCoords(e.clientX, e.clientY);
+      if (!svgPos) return;
+      const x = Math.min(this.drawStartSvg.x, svgPos.x);
+      const y = Math.min(this.drawStartSvg.y, svgPos.y);
+      const w = Math.abs(svgPos.x - this.drawStartSvg.x);
+      const h = Math.abs(svgPos.y - this.drawStartSvg.y);
+      this.drawPreviewRect.set({x, y, w, h});
+      return;
+    }
     if (!this.isDragging) return;
     this.panX.set(this.dragStartPanX + (e.clientX - this.dragStartX));
     this.panY.set(this.dragStartPanY + (e.clientY - this.dragStartY));
@@ -118,10 +176,57 @@ export class PageImageViewerComponent implements OnDestroy {
 
   @HostListener('document:mouseup')
   onMouseUp() {
+    if (this.drawModeActive() && this.isDrawing()) {
+      this.isDrawing.set(false);
+      const rect = this.drawPreviewRect();
+      this.drawPreviewRect.set(null);
+      if (!rect) return;
+      const orig = this.svgRectToOriginalPx(rect);
+      if (orig.w < MIN_DRAW_PX || orig.h < MIN_DRAW_PX) {
+        this.regionTooSmall.emit();
+        return;
+      }
+      this.regionDrawn.emit(orig);
+      this.drawModeActive.set(false);
+      this.drawModeChange.emit(false);
+      return;
+    }
     this.isDragging = false;
   }
 
   ngOnDestroy() {
     this.isDragging = false;
+    this.isDrawing.set(false);
+  }
+
+  // -------------------------------------------------------------------------
+  // Coordinate helpers
+  // -------------------------------------------------------------------------
+
+  /** Converts viewport coords to image-local SVG pixel coords (pre-zoom). */
+  private clientToSvgCoords(clientX: number, clientY: number): {x: number; y: number} | null {
+    const img = this.imageRef?.nativeElement;
+    if (!img) return null;
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const scaleX = img.offsetWidth / rect.width;
+    const scaleY = img.offsetHeight / rect.height;
+    const x = Math.max(0, Math.min((clientX - rect.left) * scaleX, img.offsetWidth));
+    const y = Math.max(0, Math.min((clientY - rect.top) * scaleY, img.offsetHeight));
+    return {x, y};
+  }
+
+  /** Converts SVG-pixel rect to original image pixel coordinates. */
+  private svgRectToOriginalPx(r: BboxPx): BboxPx {
+    const img = this.imageRef?.nativeElement;
+    if (!img || img.offsetWidth === 0 || img.offsetHeight === 0) return r;
+    const sx = img.naturalWidth / img.offsetWidth;
+    const sy = img.naturalHeight / img.offsetHeight;
+    return {
+      x: Math.round(r.x * sx),
+      y: Math.round(r.y * sy),
+      w: Math.round(r.w * sx),
+      h: Math.round(r.h * sy),
+    };
   }
 }

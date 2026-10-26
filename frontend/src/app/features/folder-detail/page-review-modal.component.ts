@@ -11,7 +11,7 @@ import {
   signal,
   inject,
 } from '@angular/core';
-import { FolderDetail, PageSummary, TextBlockExport } from '../../core/api/models';
+import { BboxPx, FolderDetail, PageSummary, TextBlockExport } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { PageImageViewerComponent } from './page-image-viewer.component';
@@ -34,9 +34,19 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
     >
       <!-- Panel -->
       <div
-        class="w-[95vw] h-[90dvh] flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden"
+        class="relative w-[95vw] h-[90dvh] flex flex-col rounded-xl bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden"
         #panel
       >
+        <!-- Toast: região pequena demais -->
+        @if (smallRectToast()) {
+          <div
+            class="absolute top-16 left-1/2 -translate-x-1/2 z-10 rounded-lg px-4 py-2 text-sm bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 shadow pointer-events-none"
+            role="status"
+            aria-live="polite"
+          >
+            Retângulo muito pequeno — arraste uma área maior (mín. 10×10 px).
+          </div>
+        }
         <!-- Header -->
         <div class="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-700 flex-shrink-0">
           <div class="flex items-center gap-2 min-w-0">
@@ -86,6 +96,9 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
               [altText]="'Página ' + page().page_number"
               [blocks]="blocks()"
               [selectedBlockIndex]="selectedBlockIndex()"
+              (regionDrawn)="onRegionDrawn($event)"
+              (regionTooSmall)="onRegionTooSmall()"
+              (drawModeChange)="viewerDrawMode.set($event)"
             />
           </div>
 
@@ -133,6 +146,7 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
 
 
   @ViewChild('panel') panelRef!: ElementRef<HTMLElement>;
+  @ViewChild(BlockTableComponent) blockTable!: BlockTableComponent;
 
   readonly hasPrev = computed(() => this.page().page_number > 1);
   readonly hasNext = computed(() => this.page().page_number < this.folder().pages.length);
@@ -143,6 +157,10 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   readonly blocksLoading = signal(false);
   readonly blocksError = signal(false);
   readonly selectedBlockIndex = signal<number | null>(null);
+
+  readonly viewerDrawMode = signal(false);
+  readonly smallRectToast = signal(false);
+  private smallRectTimeout?: ReturnType<typeof setTimeout>;
 
   private blocksSub?: import('rxjs').Subscription;
   private previousActiveElement: Element | null = null;
@@ -157,6 +175,7 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     document.body.style.overflow = '';
     this.blocksSub?.unsubscribe();
+    clearTimeout(this.smallRectTimeout);
     (this.previousActiveElement as HTMLElement | null)?.focus();
   }
 
@@ -180,6 +199,16 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     this.selectedBlockIndex.set(index);
   }
 
+  onRegionDrawn(bbox: BboxPx) {
+    this.blockTable.addBlockWithBbox(bbox);
+  }
+
+  onRegionTooSmall() {
+    clearTimeout(this.smallRectTimeout);
+    this.smallRectToast.set(true);
+    this.smallRectTimeout = setTimeout(() => this.smallRectToast.set(false), 3000);
+  }
+
   close() {
     this.closed.emit();
   }
@@ -196,6 +225,8 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   @HostListener('keydown', ['$event'])
   onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      // Se o draw mode estiver ativo, o viewer já tratou o Esc via document:keydown
+      if (this.viewerDrawMode()) return;
       this.close();
       return;
     }

@@ -15,7 +15,7 @@ import {
   NonNullableFormBuilder,
   Validators,
 } from '@angular/forms';
-import { TextBlockExport, Translation } from '../../core/api/models';
+import { BboxPx, TextBlockExport, Translation } from '../../core/api/models';
 import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 
@@ -30,6 +30,7 @@ interface BlockForm {
   original: FormControl<string>;
   localizacao: FormControl<string>;
   traducoes: FormArray<FormGroup<TranslationForm>>;
+  bbox: FormControl<BboxPx | null>;
 }
 
 @Component({
@@ -84,6 +85,7 @@ export class BlockTableComponent implements OnChanges {
       traducoes: this.fb.array<FormGroup<TranslationForm>>(
         defaultTranslations.map((t) => this.makeTranslation(t)),
       ),
+      bbox: this.fb.control<BboxPx | null>(b?.bbox ?? null),
     });
   }
 
@@ -127,6 +129,13 @@ export class BlockTableComponent implements OnChanges {
 
   addBlock() {
     this.form.push(this.makeBlock());
+    const newIdx = this.form.length - 1;
+    this.selectedIndex.set(newIdx);
+    this.selectedIndexChange.emit(newIdx);
+  }
+
+  addBlockWithBbox(bbox: BboxPx) {
+    this.form.push(this.makeBlock({bbox}));
     const newIdx = this.form.length - 1;
     this.selectedIndex.set(newIdx);
     this.selectedIndexChange.emit(newIdx);

@@ -1,115 +1,181 @@
-<!-- Loading skeleton -->
+<!-- Loading skeleton (full width) -->
 @if (loading()) {
-  <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
+  <div class="list-panel divide-y divide-zinc-100 dark:divide-zinc-800">
     @for (_ of [1, 2, 3]; track $index) {
-      <div class="px-4 py-3 flex gap-3 animate-pulse">
-        <div class="w-6 h-4 rounded bg-zinc-200 dark:bg-zinc-700"></div>
-        <div class="w-12 h-6 rounded bg-zinc-200 dark:bg-zinc-700"></div>
-        <div class="flex-1 h-10 rounded bg-zinc-200 dark:bg-zinc-700"></div>
+      <div class="px-3 py-2.5 flex gap-2 animate-pulse">
+        <div class="w-5 h-4 rounded bg-zinc-200 dark:bg-zinc-700 flex-shrink-0"></div>
+        <div class="w-8 h-5 rounded bg-zinc-200 dark:bg-zinc-700 flex-shrink-0"></div>
+        <div class="flex-1 h-4 rounded bg-zinc-200 dark:bg-zinc-700"></div>
       </div>
     }
   </div>
+  <div class="detail-panel"></div>
 }
 
-<!-- Empty state -->
-@else if (form.length === 0) {
-  <div class="flex flex-col items-center justify-center py-10 text-zinc-400 dark:text-zinc-600 text-sm gap-2">
-    <svg class="size-8 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
-    </svg>
-    <p>Nenhum texto detectado nesta página</p>
-  </div>
-}
-
-<!-- Block rows -->
 @else {
-  <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
-    @for (block of form.controls; track $index; let i = $index) {
-      <div
-        class="group relative cursor-pointer transition-colors"
-        [class.bg-primary-50]="selectedIndex() === i"
-        [class.dark:bg-primary-950]="selectedIndex() === i"
-        [class.hover:bg-zinc-50]="selectedIndex() !== i"
-        [class.dark:hover:bg-zinc-800/40]="selectedIndex() !== i"
-        (click)="select(i)"
-        (keydown.enter)="select(i)"
-        (keydown.space)="select(i); $event.preventDefault()"
-        tabindex="0"
-        role="option"
-        [attr.aria-selected]="selectedIndex() === i"
-      >
-        <div class="flex gap-2 px-3 py-2">
+  <!-- Left: compact block list -->
+  <div class="list-panel">
+    @if (form.length === 0) {
+      <div class="flex flex-col items-center justify-center py-10 text-zinc-400 dark:text-zinc-600 text-xs gap-2 flex-1">
+        <svg class="size-6 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+        </svg>
+        <p>Nenhum texto detectado</p>
+      </div>
+    }
+    @else {
+      <div class="flex-1 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+        @for (block of form.controls; track $index; let i = $index) {
+          @let tipo = block.controls.tipo.value;
+          <div
+            class="group relative cursor-pointer transition-colors px-2 py-2"
+            [class.bg-primary-50]="selectedIndex() === i"
+            [class.dark:bg-primary-950]="selectedIndex() === i"
+            [class.hover:bg-zinc-50]="selectedIndex() !== i"
+            [class.dark:hover:bg-zinc-800/40]="selectedIndex() !== i"
+            (click)="select(i)"
+            (keydown.enter)="select(i)"
+            (keydown.space)="select(i); $event.preventDefault()"
+            tabindex="0"
+            role="option"
+            [attr.aria-selected]="selectedIndex() === i"
+          >
+            <div class="flex items-start gap-1.5">
+              <!-- Order -->
+              <span
+                class="text-[10px] font-mono font-bold tabular-nums leading-none mt-0.5 flex-shrink-0 w-4 text-right"
+                [class.text-primary-600]="selectedIndex() === i"
+                [class.dark:text-primary-400]="selectedIndex() === i"
+                [class.text-zinc-400]="selectedIndex() !== i"
+              >{{ i + 1 }}</span>
 
-          <!-- Order + move buttons -->
-          <div class="flex flex-col items-center gap-0.5 pt-0.5 flex-shrink-0 w-7">
-            <span class="text-xs font-mono font-bold tabular-nums leading-none"
-              [class.text-primary-600]="selectedIndex() === i"
-              [class.dark:text-primary-400]="selectedIndex() === i"
-              [class.text-zinc-400]="selectedIndex() !== i">{{ i + 1 }}</span>
-            <button
-              type="button"
-              class="move-btn"
-              (click)="moveUp(i, $event)"
-              [disabled]="i === 0"
-              aria-label="Mover bloco acima"
-            >↑</button>
-            <button
-              type="button"
-              class="move-btn"
-              (click)="moveDown(i, $event)"
-              [disabled]="i === form.length - 1"
-              aria-label="Mover bloco abaixo"
-            >↓</button>
-          </div>
+              <!-- Type badge -->
+              <span
+                class="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-bold font-mono leading-none flex-shrink-0"
+                [class.bg-blue-100]="tipo === '#'"
+                [class.text-blue-700]="tipo === '#'"
+                [class.dark:bg-blue-900]="tipo === '#'"
+                [class.dark:text-blue-300]="tipo === '#'"
+                [class.bg-amber-100]="tipo === '$'"
+                [class.text-amber-700]="tipo === '$'"
+                [class.dark:bg-amber-900]="tipo === '$'"
+                [class.dark:text-amber-300]="tipo === '$'"
+              >{{ tipo }}</span>
 
-          <!-- Type select -->
-          <div class="flex-shrink-0" [formGroup]="block">
-            <select
-              formControlName="tipo"
-              class="h-7 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 px-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              aria-label="Tipo de bloco"
+              <!-- Original preview -->
+              <span class="flex-1 min-w-0 text-[11px] text-zinc-700 dark:text-zinc-300 line-clamp-2 leading-snug font-jp">
+                {{ block.controls.original.value || '—' }}
+              </span>
+            </div>
+
+            <!-- Move + delete (on hover) -->
+            <div
+              class="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
             >
-              <option value="#"># Balão</option>
-              <option value="$">$ Fora</option>
-            </select>
+              <button type="button" class="move-btn" (click)="moveUp(i, $event)" [disabled]="i === 0" aria-label="Mover acima">↑</button>
+              <button type="button" class="move-btn" (click)="moveDown(i, $event)" [disabled]="i === form.length - 1" aria-label="Mover abaixo">↓</button>
+              <button
+                type="button"
+                class="icon-btn text-zinc-400 hover:text-red-500 dark:hover:text-red-400"
+                (click)="deleteBlock(i, $event)"
+                aria-label="Excluir bloco {{ i + 1 }}"
+              >
+                <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                </svg>
+              </button>
+            </div>
           </div>
+        }
+      </div>
+    }
 
-          <!-- Original + location + translations -->
-          <div class="flex-1 min-w-0 space-y-1.5" [formGroup]="block">
+    <!-- Add block button -->
+    <div class="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800 flex-shrink-0">
+      <button
+        type="button"
+        class="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-1 rounded"
+        (click)="addBlock()"
+      >+ Adicionar bloco</button>
+    </div>
+  </div>
 
-            <!-- Original textarea (Japanese) -->
-            <textarea
-              formControlName="original"
-              lang="ja"
-              class="field-textarea font-jp w-full"
-              placeholder="Texto original..."
-              rows="1"
-              [class.border-primary-600]="block.controls.original.invalid && block.controls.original.touched"
-              aria-label="Texto original"
-            ></textarea>
+  <!-- Right: detail panel -->
+  <div class="detail-panel">
+    @if (selectedIndex() === null) {
+      <div class="flex flex-col items-center justify-center h-full text-zinc-400 dark:text-zinc-600 text-xs gap-2">
+        <svg class="size-8 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        <p>Selecione um bloco para editar</p>
+        <p class="text-[10px]">J / K para navegar · T para alternar tipo</p>
+      </div>
+    }
+    @else if (selectedBlock(); as block) {
+      <div class="p-4 space-y-4" [formGroup]="block">
 
-            <!-- Collapsible location -->
-            <details class="text-xs">
-              <summary class="cursor-pointer text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 select-none">
-                Localização{{ block.controls.localizacao.value ? ': ' + block.controls.localizacao.value : '' }}
-              </summary>
-              <input
-                formControlName="localizacao"
-                class="field-input w-full mt-1"
-                placeholder="ex: Topo direita"
-                aria-label="Localização do bloco"
-              />
-            </details>
+        <!-- Type toggle -->
+        <div>
+          <p class="field-label">Tipo</p>
+          <div class="flex gap-1 mt-1">
+            <button
+              type="button"
+              class="type-btn"
+              [class.type-btn--hash]="block.controls.tipo.value === '#'"
+              [class.type-btn--inactive]="block.controls.tipo.value !== '#'"
+              (click)="setType('#')"
+              title="Balão de fala (tecla T)"
+            ># Balão</button>
+            <button
+              type="button"
+              class="type-btn"
+              [class.type-btn--dollar]="block.controls.tipo.value === '$'"
+              [class.type-btn--inactive]="block.controls.tipo.value !== '$'"
+              (click)="setType('$')"
+              title="Texto fora de balão (tecla T)"
+            >$ Fora</button>
+          </div>
+        </div>
 
-            <!-- Translations sub-list -->
-            <div class="space-y-1">
-              @for (t of translationsAt(i).controls; track $index; let ti = $index) {
+        <!-- Original -->
+        <div>
+          <label class="field-label" for="original-{{selectedIndex()}}">Original</label>
+          <textarea
+            formControlName="original"
+            lang="ja"
+            class="field-textarea font-jp w-full mt-1"
+            placeholder="Texto original..."
+            rows="3"
+            [id]="'original-' + selectedIndex()"
+            [class.border-primary-600]="block.controls.original.invalid && block.controls.original.touched"
+            aria-label="Texto original"
+          ></textarea>
+        </div>
+
+        <!-- Location -->
+        <div>
+          <label class="field-label" for="loc-{{selectedIndex()}}">Localização</label>
+          <input
+            formControlName="localizacao"
+            class="field-input w-full mt-1"
+            placeholder="ex: Topo direita"
+            [id]="'loc-' + selectedIndex()"
+            aria-label="Localização do bloco"
+          />
+        </div>
+
+        <!-- Translations -->
+        <div>
+          <p class="field-label mb-1">Sugestões de tradução</p>
+          <div class="space-y-2">
+            @if (selectedTranslations(); as fa) {
+              @for (t of fa.controls; track $index; let ti = $index) {
                 <div class="flex gap-1.5 items-start" [formGroup]="t">
                   <!-- Relevância -->
                   <select
                     formControlName="relevancia"
                     class="h-6 w-10 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-600 dark:text-zinc-400 text-center focus:outline-none focus:ring-1 focus:ring-primary-500 flex-shrink-0"
-                    (blur)="sortTranslationsOnBlur(i)"
+                    (blur)="sortTranslationsOnBlurSelected()"
                     aria-label="Relevância da tradução {{ ti + 1 }}"
                   >
                     @for (n of RELEVANCE_OPTIONS; track n) {
@@ -132,63 +198,39 @@
                     formControlName="observacao"
                     class="field-input w-20 flex-shrink-0"
                     placeholder="Obs."
-                    aria-label="Observação da tradução {{ ti + 1 }}"
+                    aria-label="Observação {{ ti + 1 }}"
                   />
 
-                  <!-- Remove translation -->
+                  <!-- Remove -->
                   <button
                     type="button"
                     class="icon-btn text-zinc-400 hover:text-red-500 dark:hover:text-red-400 flex-shrink-0 mt-0.5"
-                    (click)="removeTranslation(i, ti, $event)"
-                    [disabled]="translationsAt(i).length <= 1"
+                    (click)="removeTranslationFromSelected(ti, $event)"
+                    [disabled]="fa.length <= 1"
                     aria-label="Remover tradução {{ ti + 1 }}"
                   >
                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
                     </svg>
                   </button>
                 </div>
               }
 
-              @if (translationsAt(i).length < 5) {
+              @if (fa.length < 5) {
                 <button
                   type="button"
                   class="text-xs text-primary-600 dark:text-primary-400 hover:underline"
-                  (click)="addTranslation(i, $event)"
+                  (click)="addTranslationToSelected($event)"
                 >+ tradução</button>
               }
-            </div>
-
-          </div><!-- /original+location+translations -->
-
-          <!-- Delete block button (appears on hover / selection) -->
-          <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              class="icon-btn text-zinc-400 hover:text-red-500 dark:hover:text-red-400 mt-0.5"
-              (click)="deleteBlock(i, $event)"
-              aria-label="Excluir bloco {{ i + 1 }}"
-            >
-              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
-              </svg>
-            </button>
+            }
           </div>
+        </div>
 
-        </div><!-- /flex gap-2 -->
-      </div><!-- /block row -->
+      </div><!-- /form -->
     }
   </div>
 }
-
-<!-- Add block button -->
-<div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
-  <button
-    type="button"
-    class="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-1 rounded"
-    (click)="addBlock()"
-  >+ Adicionar bloco</button>
-</div>
 
 <!-- Delete confirmation dialog -->
 <ui-dialog [open]="showDeleteDialog()" (closed)="cancelDelete()">

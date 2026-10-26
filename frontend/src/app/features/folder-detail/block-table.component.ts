@@ -2,6 +2,7 @@ import {
   Component,
   OnChanges,
   SimpleChanges,
+  computed,
   input,
   output,
   signal,
@@ -15,7 +16,7 @@ import {
   NonNullableFormBuilder,
   Validators,
 } from '@angular/forms';
-import { TextBlockExport, Translation } from '../../core/api/models';
+import { BboxPx, TextBlockExport, Translation } from '../../core/api/models';
 import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 
@@ -30,6 +31,7 @@ interface BlockForm {
   original: FormControl<string>;
   localizacao: FormControl<string>;
   traducoes: FormArray<FormGroup<TranslationForm>>;
+  bbox: FormControl<BboxPx | null>;
 }
 
 @Component({
@@ -56,6 +58,16 @@ export class BlockTableComponent implements OnChanges {
   private blockToDelete = signal<number | null>(null);
   readonly showDeleteDialog = this.deleteConfirmOpen.asReadonly();
   readonly deleteTarget = this.blockToDelete.asReadonly();
+
+  readonly selectedBlock = computed(() => {
+    const i = this.selectedIndex();
+    return i !== null ? (this.form.at(i) as FormGroup<BlockForm>) : null;
+  });
+
+  readonly selectedTranslations = computed(() => {
+    const i = this.selectedIndex();
+    return i !== null ? this.translationsAt(i) : null;
+  });
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['blocks']) {
@@ -84,6 +96,7 @@ export class BlockTableComponent implements OnChanges {
       traducoes: this.fb.array<FormGroup<TranslationForm>>(
         defaultTranslations.map((t) => this.makeTranslation(t)),
       ),
+      bbox: this.fb.control<BboxPx | null>(b?.bbox ?? null),
     });
   }
 
@@ -101,6 +114,35 @@ export class BlockTableComponent implements OnChanges {
     const next = this.selectedIndex() === index ? null : index;
     this.selectedIndex.set(next);
     this.selectedIndexChange.emit(next);
+  }
+
+  selectNext() {
+    const i = this.selectedIndex();
+    const max = this.form.length - 1;
+    if (max < 0) return;
+    const next = i === null ? 0 : Math.min(i + 1, max);
+    this.selectedIndex.set(next);
+    this.selectedIndexChange.emit(next);
+  }
+
+  selectPrev() {
+    const i = this.selectedIndex();
+    const max = this.form.length - 1;
+    if (max < 0) return;
+    const next = i === null ? max : Math.max(i - 1, 0);
+    this.selectedIndex.set(next);
+    this.selectedIndexChange.emit(next);
+  }
+
+  toggleType() {
+    const block = this.selectedBlock();
+    if (!block) return;
+    const current = block.controls.tipo.value;
+    block.controls.tipo.setValue(current === '#' ? '$' : '#');
+  }
+
+  setType(tipo: '#' | '$') {
+    this.selectedBlock()?.controls.tipo.setValue(tipo);
   }
 
   // ── Block order ────────────────────────────────────────────────────────────
@@ -127,6 +169,13 @@ export class BlockTableComponent implements OnChanges {
 
   addBlock() {
     this.form.push(this.makeBlock());
+    const newIdx = this.form.length - 1;
+    this.selectedIndex.set(newIdx);
+    this.selectedIndexChange.emit(newIdx);
+  }
+
+  addBlockWithBbox(bbox: BboxPx) {
+    this.form.push(this.makeBlock({ bbox }));
     const newIdx = this.form.length - 1;
     this.selectedIndex.set(newIdx);
     this.selectedIndexChange.emit(newIdx);
@@ -164,44 +213,55 @@ export class BlockTableComponent implements OnChanges {
     return this.form.at(i).controls.traducoes;
   }
 
-  addTranslation(blockIdx: number, event: Event) {
+  addTranslationToSelected(event: Event) {
+    const i = this.selectedIndex();
+    if (i === null) return;
     event.stopPropagation();
-    const fa = this.translationsAt(blockIdx);
+    const fa = this.translationsAt(i);
     if (fa.length >= 5) return;
     fa.push(this.makeTranslation());
   }
 
-  removeTranslation(blockIdx: number, tIdx: number, event: Event) {
+  removeTranslationFromSelected(tIdx: number, event: Event) {
+    const i = this.selectedIndex();
+    if (i === null) return;
     event.stopPropagation();
-    const fa = this.translationsAt(blockIdx);
+    const fa = this.translationsAt(i);
     if (fa.length <= 1) return;
     fa.removeAt(tIdx);
   }
 
-  sortTranslationsOnBlur(blockIdx: number) {
-    const fa = this.translationsAt(blockIdx);
+  sortTranslationsOnBlurSelected() {
+    const i = this.selectedIndex();
+    if (i === null) return;
+    const fa = this.translationsAt(i);
     const values = fa.controls.map((c) => ({ ...c.value })) as {
       traducao: string;
       observacao: string;
       relevancia: number;
     }[];
     const sorted = [...values].sort((a, b) => a.relevancia - b.relevancia);
-    sorted.forEach((v, i) => fa.at(i).setValue(v as never, { emitEvent: false }));
+    sorted.forEach((v, idx) => fa.at(idx).setValue(v as never, { emitEvent: false }));
   }
 
   // ── Serialise ──────────────────────────────────────────────────────────────
 
   toTextBlocks(): TextBlockExport[] {
-    return this.form.controls.map((g, i) => ({
-      ordem: i + 1,
-      tipo: (g.value.tipo ?? '#') as '#' | '$',
-      original: g.value.original ?? '',
-      localizacao: g.value.localizacao ?? '',
-      traducoes: (g.value.traducoes ?? []).map((t) => ({
-        traducao: t.traducao ?? '',
-        observacao: t.observacao ?? '',
-        relevancia: (t.relevancia ?? 1) as 1 | 2 | 3 | 4 | 5,
-      })),
-    }));
+    return this.form.controls.map((g, i) => {
+      const block: TextBlockExport = {
+        ordem: i + 1,
+        tipo: (g.value.tipo ?? '#') as '#' | '$',
+        original: g.value.original ?? '',
+        localizacao: g.value.localizacao ?? '',
+        traducoes: (g.value.traducoes ?? []).map((t) => ({
+          traducao: t.traducao ?? '',
+          observacao: t.observacao ?? '',
+          relevancia: (t.relevancia ?? 1) as 1 | 2 | 3 | 4 | 5,
+        })),
+      };
+      const bbox = g.value.bbox;
+      if (bbox) block.bbox = bbox;
+      return block;
+    });
   }
 }

@@ -25,8 +25,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
@@ -34,6 +34,24 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: arq worker.main.WorkerSettings
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-manga}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-manga_translator}
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - media_data:/app/media
     depends_on:

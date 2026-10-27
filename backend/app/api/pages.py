@@ -1,6 +1,7 @@
 import io
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from arq.connections import ArqRedis
@@ -65,6 +66,33 @@ class ProcessPageOut(BaseModel):
     blocos: list[TextBlockExport]
 
 
+class RunSpan(BaseModel):
+    span_id: str
+    run_id: str
+    stage: str
+    provider: str
+    model_version: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    cost_usd: float
+    success: bool
+    fallback_used: bool
+
+
+class RunOut(BaseModel):
+    id: UUID
+    run_type: str
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    duration_ms: int | None
+    error_message: str | None
+    prompt_version: str | None
+    created_at: datetime
+    spans: list[RunSpan]
+
+
 class PageUpdate(BaseModel):
     page_number: int | None = None
 
@@ -123,6 +151,30 @@ async def _dispatch_and_wait(
     return list(result.scalars().all())
 
 
+def _run_to_out(run: ProcessingRun) -> RunOut:
+    duration_ms: int | None = None
+    if run.started_at is not None and run.finished_at is not None:
+        duration_ms = int((run.finished_at - run.started_at).total_seconds() * 1000)
+
+    spans: list[RunSpan] = []
+    if run.model_metadata:
+        raw_spans: list[dict[str, Any]] = run.model_metadata.get("spans", [])
+        spans = [RunSpan.model_validate(s) for s in raw_spans]
+
+    return RunOut(
+        id=run.id,
+        run_type=run.run_type.value,
+        status=run.status.value,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        duration_ms=duration_ms,
+        error_message=run.error_message,
+        prompt_version=run.prompt_version,
+        created_at=run.created_at,
+        spans=spans,
+    )
+
+
 async def _get_or_404(page_id: UUID, db: AsyncSession) -> Page:
     page = await db.get(Page, page_id)
     if page is None:
@@ -133,6 +185,18 @@ async def _get_or_404(page_id: UUID, db: AsyncSession) -> Page:
 @router.get("/{page_id}", response_model=PageOut)
 async def get_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Page:
     return await _get_or_404(page_id, db)
+
+
+@router.get("/{page_id}/runs", response_model=list[RunOut])
+async def list_runs(page_id: UUID, db: AsyncSession = Depends(get_db)) -> list[RunOut]:
+    await _get_or_404(page_id, db)
+    result = await db.execute(
+        select(ProcessingRun)
+        .where(ProcessingRun.page_id == page_id)
+        .order_by(ProcessingRun.created_at.desc())
+    )
+    runs = list(result.scalars().all())
+    return [_run_to_out(r) for r in runs]
 
 
 @router.patch("/{page_id}", response_model=PageOut)

@@ -211,6 +211,9 @@ class ProcessingRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     page: Mapped["Page"] = relationship(back_populates="processing_runs")
     text_blocks: Mapped[list["TextBlock"]] = relationship(back_populates="processing_run")

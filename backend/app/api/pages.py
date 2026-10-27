@@ -233,15 +233,26 @@ async def reprocess_page(
         )
 
     if not force:
-        manual_check = await db.execute(
+        manual_res = await db.execute(
             select(TextBlock)
             .where(TextBlock.page_id == page_id, TextBlock.source == BlockSource.MANUAL)
             .limit(1)
         )
-        if manual_check.scalars().first() is not None:
+        reviewed_res = await db.execute(
+            select(TextBlock)
+            .where(TextBlock.page_id == page_id, TextBlock.review_status == ReviewStatus.REVIEWED)
+            .limit(1)
+        )
+        has_manual = manual_res.scalars().first() is not None
+        has_reviewed = reviewed_res.scalars().first() is not None
+        if has_manual or has_reviewed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Existem edições manuais. Use force=true para sobrescrever",
+                detail={
+                    "message": "Existem edições protegidas. Use force=true para sobrescrever",
+                    "has_manual": has_manual,
+                    "has_reviewed": has_reviewed,
+                },
             )
 
     run = ProcessingRun(page_id=page_id, run_type=RunType.FULL)

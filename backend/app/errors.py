@@ -9,10 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 async def http_exception_handler(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": {"message": exc.detail, "status": exc.status_code}},
-    )
+    if isinstance(exc.detail, dict):
+        content: dict[str, object] = {"error": {"status": exc.status_code, **exc.detail}}
+    else:
+        content = {"error": {"message": exc.detail, "status": exc.status_code}}
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 
 async def validation_exception_handler(

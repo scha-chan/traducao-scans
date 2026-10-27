@@ -1,9 +1,12 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import queue
 from app.api import api_router
 from app.errors import (
     http_exception_handler,
@@ -16,9 +19,18 @@ from app.settings import settings
 configure_logging(settings.log_level)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    await queue.get_pool()
+    yield
+    await queue.close_pool()
+
+
 app = FastAPI(
     title="Manga Translator API",
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]

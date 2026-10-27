@@ -4,9 +4,10 @@ from typing import Any
 from uuid import UUID
 
 from arq import Retry
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models import Page, PageStatus, ProcessingRun, RunStatus
+from app.db.models import Page, PageStatus, ProcessingRun, RunStatus, RunType, TextBlock
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
         await db.commit()
 
         try:
-            block_count = await _pipeline(db, UUID(page_id))
+            block_count = await _pipeline(db, UUID(page_id), run)
 
             run.status = RunStatus.SUCCESS
             run.finished_at = datetime.now(UTC)
@@ -71,6 +72,11 @@ class _TransientError(Exception):
     """Transient failure (network, rate-limit, temporary unavailability) — safe to retry."""
 
 
-async def _pipeline(db: AsyncSession, page_id: UUID) -> int:
-    """Scaffold — OCR + translation to be wired in F5-AG-01."""
+async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
+    """Scaffold — OCR + translation to be wired in F5-AG-01.
+
+    For FULL runs, existing blocks are cleared so the page reflects the new result.
+    """
+    if run.run_type == RunType.FULL:
+        await db.execute(delete(TextBlock).where(TextBlock.page_id == page_id))
     return 0

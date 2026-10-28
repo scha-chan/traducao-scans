@@ -7,6 +7,8 @@ from arq import Retry
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from agent.orchestrator import build_pipeline
+from agent.state import PageAnalysisState
 from app.db.models import Page, PageStatus, ProcessingRun, RunStatus, RunType, TextBlock
 
 logger = logging.getLogger(__name__)
@@ -73,10 +75,30 @@ class _TransientError(Exception):
 
 
 async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
-    """Scaffold — OCR + translation to be wired in F5-AG-01.
+    """Run the analysis pipeline via Orchestrator and persist results.
 
-    For FULL runs, existing blocks are cleared so the page reflects the new result.
+    Stages F3-AG-02 – F3-AG-07 fill dialogues; this scaffold wires the
+    orchestrator call and persists model_metadata (spans + agent_log).
     """
+    page: Page | None = await db.get(Page, page_id)
+    if page is None:
+        raise ValueError(f"Page {page_id} not found")
+
+    initial_state = PageAnalysisState(
+        page_id=page_id,
+        run_id=run.id,
+        image_path=page.file_path,
+    )
+
     if run.run_type == RunType.FULL:
         await db.execute(delete(TextBlock).where(TextBlock.page_id == page_id))
-    return 0
+
+    orchestrator = build_pipeline()
+    final_state = await orchestrator.run(initial_state)
+
+    run.model_metadata = {
+        "spans": [s.to_dict() for s in final_state.spans],
+        "agent_log": [e.to_dict() for e in final_state.agent_log],
+    }
+
+    return len(final_state.dialogues)

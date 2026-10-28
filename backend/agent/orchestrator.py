@@ -42,8 +42,8 @@ class Orchestrator:
 def build_pipeline() -> Orchestrator:
     """Construct the default full-analysis pipeline.
 
-    Stages F3-AG-02 through F3-AG-07 are wired here as they are implemented.
+    Stages F3-AG-03 through F3-AG-07 are wired here as they are implemented.
     """
-    from agent.stages.stub import StubStage  # noqa: PLC0415
+    from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
 
-    return Orchestrator(stages=[StubStage()])
+    return Orchestrator(stages=[PreprocessStage()])

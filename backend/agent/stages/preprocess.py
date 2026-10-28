@@ -35,10 +35,11 @@ class PreprocessStage(Stage):
         return state
 
     def _process(self, image_path: str, run_id: UUID) -> str:
-        img = Image.open(image_path)
+        src: Image.Image = Image.open(image_path)
 
         # Correct EXIF orientation (e.g. phone photos rotated 90°)
-        img = ImageOps.exif_transpose(img)
+        # exif_transpose returns Image | None; fall back to src when no-op
+        img: Image.Image = ImageOps.exif_transpose(src) or src
 
         # Ensure RGB (no alpha channel, no palette mode)
         img = img.convert("RGB")

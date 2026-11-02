@@ -51,6 +51,7 @@ def build_pipeline() -> Orchestrator:
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.divisa import DivisaStage  # noqa: PLC0415
     from agent.stages.handwritten import HandwrittenStage  # noqa: PLC0415
+    from agent.stages.location import LocationStage  # noqa: PLC0415
     from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
@@ -77,6 +78,7 @@ def build_pipeline() -> Orchestrator:
     divisa = DivisaStage()
     reading_order = ReadingOrderStage()
     classification = ClassificationStage()
+    location = LocationStage()
     return Orchestrator(
         stages=[
             PreprocessStage(),
@@ -88,6 +90,7 @@ def build_pipeline() -> Orchestrator:
             divisa,
             reading_order,
             classification,
+            location,
             translation,
         ]
     )

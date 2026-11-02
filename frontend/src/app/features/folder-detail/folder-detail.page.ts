@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, signal, inject, computed } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { Subscription, interval } from 'rxjs';
+import { switchMap, filter, take } from 'rxjs/operators';
 import { FoldersApi } from '../../core/api/folders.api';
 import { PagesApi } from '../../core/api/pages.api';
 import { FolderDetail, PageSummary } from '../../core/api/models';
@@ -9,6 +10,7 @@ import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { UiSkeletonComponent } from '../../shared/ui/ui-skeleton.component';
 import { UiEmptyStateComponent } from '../../shared/ui/ui-empty-state.component';
 import { PageReviewModalComponent } from './page-review-modal.component';
+import { ToastService } from '../../shared/ui/ui-toast/toast.service';
 
 @Component({
   selector: 'app-folder-detail-page',
@@ -75,7 +77,36 @@ import { PageReviewModalComponent } from './page-review-modal.component';
           <!-- Thumbnail grid -->
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             @for (page of folder()!.pages; track page.id) {
-              @if (page.status === 'ERROR') {
+              @if (page.status === 'PENDING') {
+                <!-- Pending card: not analyzed yet -->
+                <div class="flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
+                  <div class="aspect-[2/3] flex flex-col items-center justify-center gap-3 bg-zinc-100 dark:bg-zinc-900 p-3 text-center">
+                    <svg class="size-8 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Não analisada</p>
+                  </div>
+                  <div class="px-2 py-1.5 flex flex-col gap-1">
+                    <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
+                    <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 text-left">
+                      Analisar página
+                    </button>
+                  </div>
+                </div>
+              } @else if (page.status === 'PROCESSING') {
+                <!-- Processing card: analysis in progress -->
+                <div class="flex flex-col rounded-lg overflow-hidden border border-primary-200 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-950/30">
+                  <div class="aspect-[2/3] flex flex-col items-center justify-center gap-3 bg-primary-50 dark:bg-primary-950/50 p-3 text-center">
+                    <svg class="size-8 text-primary-500 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                    <p class="text-xs text-primary-600 dark:text-primary-400">Analisando…</p>
+                  </div>
+                  <div class="px-2 py-1.5 flex flex-col gap-0.5">
+                    <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
+                    <span class="inline-flex items-center gap-1 text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950 rounded px-1.5 py-0.5 w-fit">
+                      <svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                      Processando
+                    </span>
+                  </div>
+                </div>
+              } @else if (page.status === 'ERROR') {
                 <!-- Error card -->
                 <div class="flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
                   <div class="aspect-[2/3] flex flex-col items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-900 p-3 text-center">
@@ -128,6 +159,7 @@ export class FolderDetailPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly foldersApi = inject(FoldersApi);
   private readonly pagesApi = inject(PagesApi);
+  private readonly toast = inject(ToastService);
 
   readonly folder = signal<FolderDetail | null>(null);
   readonly loading = signal(true);
@@ -135,6 +167,8 @@ export class FolderDetailPage implements OnInit, OnDestroy {
   readonly downloading = signal(false);
 
   private readonly retryingIds = signal<string[]>([]);
+  private readonly analyzingIds = signal<string[]>([]);
+  private readonly pollingSubscriptions = new Map<string, Subscription>();
   private readonly activePageNumber = signal<number | null>(null);
 
   readonly activePage = computed<PageSummary | null>(() => {
@@ -159,6 +193,8 @@ export class FolderDetailPage implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.queryParamSub?.unsubscribe();
+    this.pollingSubscriptions.forEach((sub) => sub.unsubscribe());
+    this.pollingSubscriptions.clear();
   }
 
   loadFolder(folderId: string) {
@@ -231,6 +267,73 @@ export class FolderDetailPage implements OnInit, OnDestroy {
       queryParams: { pagina: pageNumber },
       queryParamsHandling: 'merge',
     });
+  }
+
+  analyze(page: PageSummary) {
+    if (this.isAnalyzing(page.id)) return;
+    this.pagesApi.analyze(page.id).subscribe({
+      next: () => {
+        this.analyzingIds.update((ids) => [...ids, page.id]);
+        this.updatePageStatus(page.id, 'PROCESSING');
+        this.startPolling(page.id);
+      },
+      error: (err) => {
+        if (err?.status === 409) {
+          this.toast.warning('Esta página já está sendo processada. Tente em instantes.');
+        } else {
+          this.toast.error('Erro ao iniciar a análise. Tente novamente.');
+        }
+      },
+    });
+  }
+
+  isAnalyzing(pageId: string): boolean {
+    return this.analyzingIds().includes(pageId);
+  }
+
+  private updatePageStatus(pageId: string, newStatus: PageSummary['status']) {
+    const f = this.folder();
+    if (!f) return;
+    this.folder.set({
+      ...f,
+      pages: f.pages.map((p) => (p.id === pageId ? { ...p, status: newStatus } : p)),
+    });
+  }
+
+  private startPolling(pageId: string) {
+    this.pollingSubscriptions.get(pageId)?.unsubscribe();
+
+    const delayMs = 2000;
+    const sub = interval(delayMs).pipe(
+      switchMap(() => this.pagesApi.getRuns(pageId)),
+      filter((runs) => runs.length > 0 && (runs[0].status === 'SUCCESS' || runs[0].status === 'ERROR')),
+      take(1),
+    ).subscribe({
+      next: (runs) => {
+        this.analyzingIds.update((ids) => ids.filter((id) => id !== pageId));
+        this.pollingSubscriptions.delete(pageId);
+
+        if (runs[0].status === 'SUCCESS') {
+          this.toast.success('Página analisada com sucesso.');
+          // Reload the full folder to get updated page data
+          const folderId = this.route.snapshot.paramMap.get('folderId')!;
+          this.foldersApi.get(folderId).subscribe({
+            next: (f) => this.folder.set(f),
+          });
+        } else {
+          this.toast.error('Erro na análise da página.');
+          this.updatePageStatus(pageId, 'ERROR');
+        }
+      },
+      error: () => {
+        this.analyzingIds.update((ids) => ids.filter((id) => id !== pageId));
+        this.pollingSubscriptions.delete(pageId);
+        this.toast.error('Erro ao verificar o status da análise.');
+        this.updatePageStatus(pageId, 'ERROR');
+      },
+    });
+
+    this.pollingSubscriptions.set(pageId, sub);
   }
 
   downloadTxtFinal() {

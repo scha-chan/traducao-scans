@@ -42,15 +42,20 @@ class Orchestrator:
 def build_pipeline() -> Orchestrator:
     """Construct the default full-analysis pipeline.
 
-    Stages F3-AG-04 through F3-AG-07 are wired here as they are implemented.
+    Stages F3-AG-05 through F3-AG-07 are wired here as they are implemented.
     """
     import os  # noqa: PLC0415
 
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
+    from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
+    from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
 
     detection = DetectionStage(
         provider=ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
     )
-    return Orchestrator(stages=[PreprocessStage(), detection])
+    ocr = OcrStage(
+        provider=MangaOcrProvider(pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL"))
+    )
+    return Orchestrator(stages=[PreprocessStage(), detection, ocr])

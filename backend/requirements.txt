@@ -15,6 +15,7 @@ Pillow==11.0.0
 numpy==2.2.6
 opencv-python-headless==4.10.0.84
 onnxruntime==1.19.2
+manga-ocr==0.1.16
 
 # File upload (multipart/form-data)
 python-multipart==0.0.12

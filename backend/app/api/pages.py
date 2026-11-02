@@ -218,6 +218,43 @@ async def delete_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> None
     file_path.unlink(missing_ok=True)
 
 
+class AnalyzeOut(BaseModel):
+    run_id: UUID
+
+
+@router.post("/{page_id}/analyze", status_code=status.HTTP_202_ACCEPTED, response_model=AnalyzeOut)
+async def analyze_page_async(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> AnalyzeOut:
+    """Enqueue analysis without waiting (returns 202 immediately)."""
+    page = await _get_or_404(page_id, db)
+
+    if page.status == PageStatus.PROCESSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Esta página já está sendo processada",
+        )
+
+    run = ProcessingRun(page_id=page_id, run_type=RunType.FULL)
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    pool = await queue.get_pool()
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        page.status = PageStatus.ERROR
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de análise",
+        )
+
+    return AnalyzeOut(run_id=run.id)
+
+
 @router.post("/{page_id}/process", response_model=ProcessPageOut)
 async def reprocess_page(
     page_id: UUID,

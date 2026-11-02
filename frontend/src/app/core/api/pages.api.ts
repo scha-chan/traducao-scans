@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { PageSummary, TextBlockExport, ProcessPageResponse } from './models';
+import { PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -36,5 +36,13 @@ export class PagesApi extends ApiBase {
 
   imageUrl(page: PageSummary): string {
     return this.url(page.image_url);
+  }
+
+  analyze(pageId: string): Observable<AnalyzeResponse> {
+    return this.http.post<AnalyzeResponse>(this.url(`/api/pages/${pageId}/analyze`), null);
+  }
+
+  getRuns(pageId: string): Observable<RunOut[]> {
+    return this.http.get<RunOut[]>(this.url(`/api/pages/${pageId}/runs`));
   }
 }

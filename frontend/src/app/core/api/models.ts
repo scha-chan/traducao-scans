@@ -70,3 +70,19 @@ export interface FolderExport {
   pasta: string;
   paginas: PageExport[];
 }
+
+export interface AnalyzeResponse {
+  run_id: string;
+}
+
+export interface RunOut {
+  id: string;
+  run_type: string;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'ERROR';
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  error_message: string | null;
+  prompt_version: string | null;
+  created_at: string;
+}

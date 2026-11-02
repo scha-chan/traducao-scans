@@ -51,6 +51,7 @@ def build_pipeline() -> Orchestrator:
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
+    from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
     from agent.stages.translation import TranslationStage  # noqa: PLC0415
@@ -61,6 +62,7 @@ def build_pipeline() -> Orchestrator:
     ocr = OcrStage(
         provider=MangaOcrProvider(pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL"))
     )
+    merge = MergeBlocksStage()
     confidence = LowConfidenceStage(
         threshold=float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
     )
@@ -70,4 +72,4 @@ def build_pipeline() -> Orchestrator:
             en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
         )
     )
-    return Orchestrator(stages=[PreprocessStage(), detection, ocr, confidence, translation])
+    return Orchestrator(stages=[PreprocessStage(), detection, ocr, merge, confidence, translation])

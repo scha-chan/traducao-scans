@@ -42,6 +42,10 @@ export class PagesApi extends ApiBase {
     return this.http.post<AnalyzeResponse>(this.url(`/api/pages/${pageId}/analyze`), null);
   }
 
+  analyzeForce(pageId: string): Observable<AnalyzeResponse> {
+    return this.http.post<AnalyzeResponse>(this.url(`/api/pages/${pageId}/analyze?force=true`), null);
+  }
+
   getRuns(pageId: string): Observable<RunOut[]> {
     return this.http.get<RunOut[]>(this.url(`/api/pages/${pageId}/runs`));
   }

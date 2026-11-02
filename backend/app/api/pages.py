@@ -225,6 +225,7 @@ class AnalyzeOut(BaseModel):
 @router.post("/{page_id}/analyze", status_code=status.HTTP_202_ACCEPTED, response_model=AnalyzeOut)
 async def analyze_page_async(
     page_id: UUID,
+    force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> AnalyzeOut:
     """Enqueue analysis without waiting (returns 202 immediately)."""
@@ -233,8 +234,35 @@ async def analyze_page_async(
     if page.status == PageStatus.PROCESSING:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Esta página já está sendo processada",
+            detail={
+                "code": "ALREADY_PROCESSING",
+                "message": "Esta página já está sendo processada",
+            },
         )
+
+    if not force:
+        manual_res = await db.execute(
+            select(TextBlock)
+            .where(TextBlock.page_id == page_id, TextBlock.source == BlockSource.MANUAL)
+            .limit(1)
+        )
+        reviewed_res = await db.execute(
+            select(TextBlock)
+            .where(TextBlock.page_id == page_id, TextBlock.review_status == ReviewStatus.REVIEWED)
+            .limit(1)
+        )
+        has_manual = manual_res.scalars().first() is not None
+        has_reviewed = reviewed_res.scalars().first() is not None
+        if has_manual or has_reviewed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "HAS_MANUAL_EDITS",
+                    "message": "Existem edições protegidas. Use force=true para sobrescrever",
+                    "has_manual": has_manual,
+                    "has_reviewed": has_reviewed,
+                },
+            )
 
     run = ProcessingRun(page_id=page_id, run_type=RunType.FULL)
     page.status = PageStatus.PROCESSING

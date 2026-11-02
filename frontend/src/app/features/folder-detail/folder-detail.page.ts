@@ -9,13 +9,14 @@ import { buildFolderTxt, downloadTxt, txtFileName } from '../../export/txt-expor
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { UiSkeletonComponent } from '../../shared/ui/ui-skeleton.component';
 import { UiEmptyStateComponent } from '../../shared/ui/ui-empty-state.component';
+import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
 import { PageReviewModalComponent } from './page-review-modal.component';
 import { ToastService } from '../../shared/ui/ui-toast/toast.service';
 
 @Component({
   selector: 'app-folder-detail-page',
   standalone: true,
-  imports: [RouterLink, UiButtonComponent, UiSkeletonComponent, UiEmptyStateComponent, PageReviewModalComponent],
+  imports: [RouterLink, UiButtonComponent, UiSkeletonComponent, UiEmptyStateComponent, UiDialogComponent, PageReviewModalComponent],
   template: `
     <div class="mx-auto max-w-7xl px-4 py-8">
 
@@ -143,6 +144,22 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
       }
     </div>
 
+    <!-- Force-analyze confirmation dialog -->
+    <ui-dialog [open]="forceAnalyzeDialog()" (closed)="cancelForceAnalyze()">
+      <div class="p-6 flex flex-col gap-4">
+        <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100">Sobrescrever edições?</h2>
+        <p class="text-sm text-zinc-600 dark:text-zinc-400">
+          Esta página tem edições manuais ou revisões salvas.
+          Reanalisar irá substituir todo o conteúdo pelo resultado da IA.
+          Esta ação não pode ser desfeita.
+        </p>
+        <div class="flex justify-end gap-2 pt-2">
+          <ui-button variant="secondary" (click)="cancelForceAnalyze()">Cancelar</ui-button>
+          <ui-button variant="destructive" (click)="confirmForceAnalyze()">Reanalisar mesmo assim</ui-button>
+        </div>
+      </div>
+    </ui-dialog>
+
     <!-- Page review modal -->
     @if (activePage() && folder()) {
       <app-page-review-modal
@@ -170,6 +187,9 @@ export class FolderDetailPage implements OnInit, OnDestroy {
   private readonly analyzingIds = signal<string[]>([]);
   private readonly pollingSubscriptions = new Map<string, Subscription>();
   private readonly activePageNumber = signal<number | null>(null);
+
+  readonly forceAnalyzeDialog = signal(false);
+  private pendingForcePageId = signal<string | null>(null);
 
   readonly activePage = computed<PageSummary | null>(() => {
     const n = this.activePageNumber();
@@ -279,10 +299,38 @@ export class FolderDetailPage implements OnInit, OnDestroy {
       },
       error: (err) => {
         if (err?.status === 409) {
-          this.toast.warning('Esta página já está sendo processada. Tente em instantes.');
+          const code = err?.error?.detail?.code;
+          if (code === 'HAS_MANUAL_EDITS') {
+            this.pendingForcePageId.set(page.id);
+            this.forceAnalyzeDialog.set(true);
+          } else {
+            this.toast.warning('Esta página já está sendo processada. Tente em instantes.');
+          }
         } else {
           this.toast.error('Erro ao iniciar a análise. Tente novamente.');
         }
+      },
+    });
+  }
+
+  cancelForceAnalyze() {
+    this.forceAnalyzeDialog.set(false);
+    this.pendingForcePageId.set(null);
+  }
+
+  confirmForceAnalyze() {
+    const pageId = this.pendingForcePageId();
+    if (!pageId) return;
+    this.forceAnalyzeDialog.set(false);
+    this.pendingForcePageId.set(null);
+    this.pagesApi.analyzeForce(pageId).subscribe({
+      next: () => {
+        this.analyzingIds.update((ids) => [...ids, pageId]);
+        this.updatePageStatus(pageId, 'PROCESSING');
+        this.startPolling(pageId);
+      },
+      error: () => {
+        this.toast.error('Erro ao iniciar a análise. Tente novamente.');
       },
     });
   }

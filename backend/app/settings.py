@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     debug: bool = False
     upload_dir: str = "uploads"
+    ocr_low_confidence_threshold: float = 0.80
 
 
 settings = Settings()

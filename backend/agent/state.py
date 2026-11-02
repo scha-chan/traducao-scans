@@ -106,6 +106,7 @@ class DialogueState:
     location: str | None = None
     order: int | None = None
     ocr_confidence: float | None = None
+    type_confidence: float | None = None
     needs_review: bool = False
     review_reason: str | None = None
     translations: list[TranslationCandidate] = field(default_factory=list)

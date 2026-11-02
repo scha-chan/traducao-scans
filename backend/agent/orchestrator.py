@@ -46,6 +46,7 @@ def build_pipeline() -> Orchestrator:
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
     from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
+    from agent.stages.classification import ClassificationStage  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.divisa import DivisaStage  # noqa: PLC0415
@@ -75,6 +76,7 @@ def build_pipeline() -> Orchestrator:
     handwritten = HandwrittenStage()
     divisa = DivisaStage()
     reading_order = ReadingOrderStage()
+    classification = ClassificationStage()
     return Orchestrator(
         stages=[
             PreprocessStage(),
@@ -85,6 +87,7 @@ def build_pipeline() -> Orchestrator:
             handwritten,
             divisa,
             reading_order,
+            classification,
             translation,
         ]
     )

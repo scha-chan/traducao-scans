@@ -42,13 +42,14 @@ class Orchestrator:
 def build_pipeline() -> Orchestrator:
     """Construct the default full-analysis pipeline.
 
-    Stages F3-AG-05 through F3-AG-07 are wired here as they are implemented.
+    Stages F3-AG-06 and F3-AG-07 are wired here as they are implemented.
     """
     import os  # noqa: PLC0415
 
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
     from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
+    from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
@@ -60,10 +61,13 @@ def build_pipeline() -> Orchestrator:
     ocr = OcrStage(
         provider=MangaOcrProvider(pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL"))
     )
+    confidence = LowConfidenceStage(
+        threshold=float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
+    )
     translation = TranslationStage(
         provider=MarianTranslationProvider(
             ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
             en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
         )
     )
-    return Orchestrator(stages=[PreprocessStage(), detection, ocr, translation])
+    return Orchestrator(stages=[PreprocessStage(), detection, ocr, confidence, translation])

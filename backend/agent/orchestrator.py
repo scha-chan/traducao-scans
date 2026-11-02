@@ -51,6 +51,7 @@ def build_pipeline() -> Orchestrator:
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
+    from agent.stages.handwritten import HandwrittenStage  # noqa: PLC0415
     from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
@@ -72,4 +73,7 @@ def build_pipeline() -> Orchestrator:
             en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
         )
     )
-    return Orchestrator(stages=[PreprocessStage(), detection, ocr, merge, confidence, translation])
+    handwritten = HandwrittenStage()
+    return Orchestrator(
+        stages=[PreprocessStage(), detection, ocr, merge, confidence, handwritten, translation]
+    )

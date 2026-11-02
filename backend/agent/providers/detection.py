@@ -46,7 +46,9 @@ class ComicTextDetectorProvider:
         self._cv2 = cv2
         self._np = np
 
-        path = model_path or os.environ.get("CTD_MODEL_PATH", "models/comictextdetector.pt.onnx")
+        path: str = model_path or os.environ.get(
+            "CTD_MODEL_PATH", "models/comictextdetector.pt.onnx"
+        )
         if not os.path.isfile(path):
             raise RuntimeError(
                 f"comic-text-detector model not found at '{path}'. "

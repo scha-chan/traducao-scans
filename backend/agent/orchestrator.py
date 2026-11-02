@@ -48,7 +48,7 @@ def build_pipeline() -> Orchestrator:
 
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
     from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
-    from agent.providers.translation import HuggingFaceTranslationProvider  # noqa: PLC0415
+    from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
@@ -61,8 +61,7 @@ def build_pipeline() -> Orchestrator:
         provider=MangaOcrProvider(pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL"))
     )
     translation = TranslationStage(
-        provider=HuggingFaceTranslationProvider(
-            api_token=os.environ.get("HF_API_TOKEN"),
+        provider=MarianTranslationProvider(
             ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
             en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
         )

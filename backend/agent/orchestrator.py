@@ -40,10 +40,7 @@ class Orchestrator:
 
 
 def build_pipeline() -> Orchestrator:
-    """Construct the default full-analysis pipeline.
-
-    Stages F3-AG-06 and F3-AG-07 are wired here as they are implemented.
-    """
+    """Construct the default full-analysis pipeline."""
     import os  # noqa: PLC0415
 
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
@@ -51,10 +48,12 @@ def build_pipeline() -> Orchestrator:
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
+    from agent.stages.divisa import DivisaStage  # noqa: PLC0415
     from agent.stages.handwritten import HandwrittenStage  # noqa: PLC0415
     from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
+    from agent.stages.reading_order import ReadingOrderStage  # noqa: PLC0415
     from agent.stages.translation import TranslationStage  # noqa: PLC0415
 
     detection = DetectionStage(
@@ -74,6 +73,18 @@ def build_pipeline() -> Orchestrator:
         )
     )
     handwritten = HandwrittenStage()
+    divisa = DivisaStage()
+    reading_order = ReadingOrderStage()
     return Orchestrator(
-        stages=[PreprocessStage(), detection, ocr, merge, confidence, handwritten, translation]
+        stages=[
+            PreprocessStage(),
+            detection,
+            ocr,
+            merge,
+            confidence,
+            handwritten,
+            divisa,
+            reading_order,
+            translation,
+        ]
     )

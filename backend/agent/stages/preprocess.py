@@ -30,11 +30,15 @@ class PreprocessStage(Stage):
 
     async def run(self, state: PageAnalysisState) -> PageAnalysisState:
         loop = asyncio.get_event_loop()
-        new_path = await loop.run_in_executor(None, self._process, state.image_path, state.run_id)
+        new_path, (w, h) = await loop.run_in_executor(
+            None, self._process, state.image_path, state.run_id
+        )
         state.image_path = new_path
+        state.page_width = w
+        state.page_height = h
         return state
 
-    def _process(self, image_path: str, run_id: UUID) -> str:
+    def _process(self, image_path: str, run_id: UUID) -> tuple[str, tuple[int, int]]:
         src: Image.Image = Image.open(image_path)
 
         # Correct EXIF orientation (e.g. phone photos rotated 90°)
@@ -54,4 +58,4 @@ class PreprocessStage(Stage):
         out_dir.mkdir(exist_ok=True)
         out_path = out_dir / f"{run_id}_pre.png"
         img.save(str(out_path), format="PNG")
-        return str(out_path)
+        return str(out_path), img.size

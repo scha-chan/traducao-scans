@@ -119,6 +119,8 @@ class PageAnalysisState:
     run_id: UUID
     image_path: str
     reading_direction: Literal["rtl", "ltr"] = "rtl"
+    page_width: int | None = None
+    page_height: int | None = None
     panels: list[PanelRegion] = field(default_factory=list)
     dialogues: list[DialogueState] = field(default_factory=list)
     spans: list[ProviderSpan] = field(default_factory=list)

@@ -76,11 +76,11 @@ class HuggingFaceTranslationProvider:
                 "Set the HF_API_TOKEN environment variable or pass api_token=."
             )
         self._token = token
-        self._ja_en_model: str = ja_en_model or os.environ.get(
-            "TRANSLATION_JA_EN_MODEL", _DEFAULT_JA_EN_MODEL
+        self._ja_en_model: str = (
+            ja_en_model or os.environ.get("TRANSLATION_JA_EN_MODEL") or _DEFAULT_JA_EN_MODEL
         )
-        self._en_pt_model: str = en_pt_model or os.environ.get(
-            "TRANSLATION_EN_PT_MODEL", _DEFAULT_EN_PT_MODEL
+        self._en_pt_model: str = (
+            en_pt_model or os.environ.get("TRANSLATION_EN_PT_MODEL") or _DEFAULT_EN_PT_MODEL
         )
 
     def translate(self, text: str) -> TranslationResult:
@@ -111,8 +111,12 @@ class MarianTranslationProvider:
                 "Install them with: pip install transformers sentencepiece torch"
             ) from exc
 
-        ja_en: str = ja_en_model or os.environ.get("TRANSLATION_JA_EN_MODEL", _DEFAULT_JA_EN_MODEL)
-        en_pt: str = en_pt_model or os.environ.get("TRANSLATION_EN_PT_MODEL", _DEFAULT_EN_PT_MODEL)
+        ja_en: str = (
+            ja_en_model or os.environ.get("TRANSLATION_JA_EN_MODEL") or _DEFAULT_JA_EN_MODEL
+        )
+        en_pt: str = (
+            en_pt_model or os.environ.get("TRANSLATION_EN_PT_MODEL") or _DEFAULT_EN_PT_MODEL
+        )
 
         self._tok_ja_en: Any = MarianTokenizer.from_pretrained(ja_en)
         self._mod_ja_en: Any = MarianMTModel.from_pretrained(ja_en)

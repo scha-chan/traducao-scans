@@ -44,16 +44,17 @@ Substitua `'CARD'` pelo identificador do card (ex.: `'F1-FE-01'`).
 Quando um parâmetro é `str | None` e há um fallback via `or`, o mypy **não** infere o resultado como `str` automaticamente. Sempre anote explicitamente:
 
 ```python
-# ❌ mypy infere str | None → erro em funções que esperam str
-self._model = model_arg or os.environ.get("MODEL", _DEFAULT)
-
-# ✅ anotação explícita resolve
+# ❌ mypy infere str | None mesmo com anotação — os.environ.get(key, default)
+#    não é suficiente para estreitar a cadeia or
 self._model: str = model_arg or os.environ.get("MODEL", _DEFAULT)
+
+# ✅ adicionar o literal como terceiro termo garante str incondicionalmente
+self._model: str = model_arg or os.environ.get("MODEL") or _DEFAULT
 # ou como variável local:
-model: str = model_arg or os.environ.get("MODEL", _DEFAULT)
+model: str = model_arg or os.environ.get("MODEL") or _DEFAULT
 ```
 
-Isso se aplica a qualquer expressão `X or Y` onde `X` é `T | None` e `Y` é `T` — o resultado é `T`, mas o mypy não estreita sem a anotação.
+**Regra:** sempre terminar a cadeia `or` com um literal/constante `str` — nunca confiar no `os.environ.get(key, default)` para estreitar o tipo na cadeia.
 
 ### `Any` em parâmetros de método (ANN401)
 

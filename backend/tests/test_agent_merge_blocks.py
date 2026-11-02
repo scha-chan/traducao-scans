@@ -86,7 +86,8 @@ async def test_furigana_base_is_empty_string() -> None:
 async def test_furigana_too_wide_not_absorbed() -> None:
     """If candidate is wider than 50% of parent, it is NOT furigana."""
     parent = _d(x=100, y=0, w=40, h=200, original="誰")
-    wide_neighbor = _d(x=142, y=0, w=25, h=200, original="other")  # 25 > 20 (50% of 40)
+    # x=200 → gap = 200-140 = 60 px > MERGE_GAP_PX, so not merged as column either
+    wide_neighbor = _d(x=200, y=0, w=25, h=200, original="other")  # 25 > 20 (50% of 40)
     result = await MergeBlocksStage().run(_make_state([parent, wide_neighbor]))
     assert len(result.dialogues) == 2
 

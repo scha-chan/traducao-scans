@@ -37,8 +37,8 @@ def _y_overlap_ratio(a: BBox, b: BBox) -> float:
 
 
 def _h_gap(a: BBox, b: BBox) -> int:
-    """Smallest horizontal gap; negative value means the bboxes overlap in X."""
-    return min(a.x - (b.x + b.width), b.x - (a.x + a.width))
+    """Horizontal gap between A and B; negative means they overlap in X."""
+    return max(a.x, b.x) - min(a.x + a.width, b.x + b.width)
 
 
 def _bbox_union(a: BBox, b: BBox) -> BBox:

@@ -16,10 +16,10 @@ repos:
     hooks:
       - id: backend-mypy
         name: mypy (backend)
-        entry: mypy --config-file backend/pyproject.toml backend/app
+        entry: bash -c "cd backend && mypy ."
         language: system
         types: [python]
-        files: ^backend/app/
+        files: ^backend/
         pass_filenames: false
 
       - id: contracts-mypy

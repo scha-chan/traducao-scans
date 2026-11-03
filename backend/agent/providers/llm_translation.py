@@ -7,12 +7,20 @@ import logging
 import os
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
-from agent.state import DialogueState, PageAnalysisState, ProviderSpan, TranslationCandidate
+from agent.cache import TranslationCache, dialogue_cache_key
+from agent.state import (
+    AgentLogEntry,
+    DialogueState,
+    PageAnalysisState,
+    ProviderSpan,
+    TranslationCandidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +75,7 @@ class ClaudeTranslationProvider:
         model: str | None = None,
         prompts_dir: str | Path | None = None,
         max_retries: int = 2,
+        cache: TranslationCache | None = None,
     ) -> None:
         resolved_key: str = api_key or os.environ.get("ANTHROPIC_API_KEY") or ""
         if not resolved_key:
@@ -78,6 +87,7 @@ class ClaudeTranslationProvider:
         self._model: str = model or os.environ.get("ANTHROPIC_TRANSLATION_MODEL") or _DEFAULT_MODEL
         self._prompts_dir = Path(prompts_dir) if prompts_dir is not None else _DEFAULT_PROMPTS_DIR
         self._max_retries = max_retries
+        self._cache = cache
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -137,6 +147,26 @@ class ClaudeTranslationProvider:
         state: PageAnalysisState | None = None,
     ) -> list[TranslationCandidate]:
         effective_version = state.prompt_version if state is not None else prompt_version
+        cache_key = dialogue_cache_key(dialogue, effective_version)
+
+        if self._cache is not None:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                if state is not None:
+                    state.agent_log.append(
+                        AgentLogEntry(
+                            timestamp=datetime.now(UTC),
+                            stage="translation",
+                            trigger="cache",
+                            action="cache_hit",
+                            detail={"cache_hit": True, "dialogue_id": dialogue.id},
+                        )
+                    )
+                logger.debug(
+                    "cache_hit dialogue=%s prompt_version=%s", dialogue.id, effective_version
+                )
+                return cached
+
         system_prompt = self._load_system_prompt(effective_version)
         user_message = self._build_user_message(dialogue)
         messages: list[dict[str, str]] = [{"role": "user", "content": user_message}]
@@ -169,6 +199,8 @@ class ClaudeTranslationProvider:
                     latency_ms=int((time.monotonic() - t0) * 1000),
                     success=True,
                 )
+                if self._cache is not None:
+                    self._cache.set(cache_key, candidates)
                 return candidates
 
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:

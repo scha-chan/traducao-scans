@@ -27,6 +27,7 @@ from app.db.models import (
     TextBlock,
     TranslationSuggestion,
 )
+from app.settings import settings
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 
@@ -216,6 +217,30 @@ async def delete_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> None
     await db.delete(page)
     await db.commit()
     file_path.unlink(missing_ok=True)
+
+
+@router.post("/{page_id}/approve", response_model=PageOut)
+async def approve_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Page:
+    page = await _get_or_404(page_id, db)
+
+    if settings.export_policy == "EXPORT_BLOCK_ON_LOW_CONFIDENCE":
+        result = await db.execute(
+            select(TextBlock).where(
+                TextBlock.page_id == page_id,
+                TextBlock.review_status == ReviewStatus.NEEDS_REVIEW,
+            )
+        )
+        needs_review = list(result.scalars().all())
+        if needs_review:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"blocos": [str(b.id) for b in needs_review]},
+            )
+
+    page.status = PageStatus.APPROVED
+    await db.commit()
+    await db.refresh(page)
+    return page
 
 
 class AnalyzeOut(BaseModel):

@@ -167,6 +167,7 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
         [page]="activePage()!"
         (closed)="closeModal()"
         (navigated)="navigateModal($event)"
+        (pageReprocessed)="onPageReprocessed($event)"
       />
     }
   `,
@@ -287,6 +288,13 @@ export class FolderDetailPage implements OnInit, OnDestroy {
       queryParams: { pagina: pageNumber },
       queryParamsHandling: 'merge',
     });
+  }
+
+  onPageReprocessed(page: PageSummary) {
+    const f = this.folder();
+    if (f) {
+      this.folder.set({ ...f, pages: f.pages.map((p) => (p.id === page.id ? page : p)) });
+    }
   }
 
   analyze(page: PageSummary) {

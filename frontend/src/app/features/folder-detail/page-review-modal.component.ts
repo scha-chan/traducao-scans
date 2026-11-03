@@ -21,6 +21,7 @@ import { buildPageLines } from '../../export/txt-export';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { PageImageViewerComponent } from './page-image-viewer.component';
 import { BlockSaveState, BlockTableComponent } from './block-table.component';
+import { ToastService } from '../../shared/ui/ui-toast/toast.service';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -280,17 +281,45 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
           </div>
         </div>
 
+        <!-- Reprocess loading overlay -->
+        @if (reprocessing()) {
+          <div
+            class="absolute inset-0 z-10 bg-white/70 dark:bg-zinc-900/70 flex flex-col items-center justify-center gap-3"
+            aria-live="polite"
+          >
+            <svg class="size-8 animate-spin text-primary-600 dark:text-primary-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            <span class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Reprocessando com IA…</span>
+          </div>
+        }
+
         <!-- Footer -->
         <div class="h-16 flex items-center justify-between px-4 border-t border-zinc-200 dark:border-zinc-700 flex-shrink-0">
           <span class="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:block">
             J/K: navegar · T: alternar tipo · ←/→: página
           </span>
           <div class="flex items-center gap-2">
-            <ui-button variant="secondary" (click)="close()">Cancelar</ui-button>
-            <ui-button variant="secondary" [disabled]="true" title="Disponível em FE-22">
-              ↻ Reprocessar
+            <ui-button variant="secondary" [disabled]="reprocessing()" (click)="close()">Cancelar</ui-button>
+            <ui-button
+              variant="secondary"
+              [loading]="regenerating()"
+              [disabled]="reprocessing() || regenerating()"
+              (click)="onRegenerateClick()"
+              aria-label="Regenerar traduções automáticas"
+              class="hidden sm:inline-flex"
+            >
+              ↻ Regenerar traduções
             </ui-button>
-            <ui-button variant="primary" [disabled]="saving()" (click)="save()" [title]="'Salvar (Ctrl+S)'">
+            <ui-button
+              variant="secondary"
+              [loading]="reprocessing()"
+              [disabled]="reprocessing() || regenerating()"
+              (click)="onReprocessClick()"
+              aria-label="Reprocessar esta imagem com a IA"
+            >
+              <span class="sm:hidden">↻</span>
+              <span class="hidden sm:inline">↻ Reprocessar</span>
+            </ui-button>
+            <ui-button variant="primary" [disabled]="saving() || reprocessing()" (click)="save()" [title]="'Salvar (Ctrl+S)'">
               @if (blockTable?.isDirty && !saving()) {
                 <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 -mt-px" aria-hidden="true"></span>
               }
@@ -323,10 +352,34 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
         </div>
       </div>
     }
+
+    <!-- Reprocess confirmation dialog -->
+    @if (reprocessDialogOpen()) {
+      <div
+        class="fixed inset-0 z-[60] bg-zinc-950/60 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reprocess-dialog-title"
+      >
+        <div class="w-full max-w-sm rounded-xl bg-white dark:bg-zinc-900 shadow-2xl p-6">
+          <h2 id="reprocess-dialog-title" class="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            Reprocessar a página {{ page().page_number }}?
+          </h2>
+          <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
+            A IA vai gerar os textos e as traduções de novo. <strong class="text-zinc-700 dark:text-zinc-200">Todas as alterações desta imagem, salvas e não salvas, serão substituídas.</strong> Esta ação não pode ser desfeita.
+          </p>
+          <div class="flex justify-end gap-2 mt-5">
+            <ui-button variant="secondary" (click)="cancelReprocess()">Cancelar</ui-button>
+            <ui-button variant="primary" (click)="confirmReprocess()">Reprocessar</ui-button>
+          </div>
+        </div>
+      </div>
+    }
   `,
 })
 export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly pagesApi = inject(PagesApi);
+  private readonly toast = inject(ToastService);
 
   readonly tabs = TABS;
 
@@ -335,6 +388,7 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
 
   readonly closed = output<void>();
   readonly navigated = output<number>();
+  readonly pageReprocessed = output<PageSummary>();
 
 
   @ViewChild('panel') panelRef!: ElementRef<HTMLElement>;
@@ -369,11 +423,17 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
 
   readonly blockSaveState = signal<BlockSaveState>('idle');
 
+  readonly reprocessDialogOpen = signal(false);
+  readonly reprocessing = signal(false);
+  readonly regenerating = signal(false);
+
   private blocksSub?: import('rxjs').Subscription;
   private saveSub?: import('rxjs').Subscription;
   private reorderSub?: import('rxjs').Subscription;
   private debounceSub?: import('rxjs').Subscription;
   private autoSaveApiSub?: import('rxjs').Subscription;
+  private reprocessSub?: import('rxjs').Subscription;
+  private regenerateSub?: import('rxjs').Subscription;
   private savedTimeout?: ReturnType<typeof setTimeout>;
   private previousActiveElement: Element | null = null;
 
@@ -397,6 +457,8 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     this.reorderSub?.unsubscribe();
     this.debounceSub?.unsubscribe();
     this.autoSaveApiSub?.unsubscribe();
+    this.reprocessSub?.unsubscribe();
+    this.regenerateSub?.unsubscribe();
     clearTimeout(this.smallRectTimeout);
     clearTimeout(this.saveErrorTimeout);
     clearTimeout(this.savedTimeout);
@@ -495,6 +557,59 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     this.pendingAction.set(null);
   }
 
+  onReprocessClick() {
+    this.reprocessDialogOpen.set(true);
+  }
+
+  cancelReprocess() {
+    this.reprocessDialogOpen.set(false);
+  }
+
+  confirmReprocess() {
+    this.reprocessDialogOpen.set(false);
+    this.reprocessing.set(true);
+    this.reprocessSub?.unsubscribe();
+    this.reprocessSub = this.pagesApi.reprocess(this.page().id).subscribe({
+      next: (result) => {
+        this.blocks.set(result.blocos);
+        this.blockTable?.markAsPristine();
+        this.blockSaveState.set('idle');
+        this.reprocessing.set(false);
+        this.toast.success('Página reprocessada');
+        this.pageReprocessed.emit(result.page);
+      },
+      error: (err) => {
+        this.reprocessing.set(false);
+        if (err?.status === 409) {
+          this.toast.warning('Esta página já está sendo processada. Tente em instantes.');
+        } else {
+          this.toast.error('Não foi possível reprocessar. Tente novamente.');
+        }
+      },
+    });
+  }
+
+  onRegenerateClick() {
+    if (this.regenerating()) return;
+    this.regenerating.set(true);
+    this.regenerateSub?.unsubscribe();
+    this.regenerateSub = this.pagesApi.regenerate(this.page().id).subscribe({
+      next: (result) => {
+        this.blocks.set(result.blocos);
+        this.blockTable?.markAsPristine();
+        this.blockSaveState.set('idle');
+        this.regenerating.set(false);
+        const costMsg = result.cost_usd != null ? ` (custo: $${result.cost_usd.toFixed(4)})` : '';
+        this.toast.success(`Traduções regeneradas${costMsg}`);
+        this.pageReprocessed.emit(result.page);
+      },
+      error: () => {
+        this.regenerating.set(false);
+        this.toast.error('Não foi possível regenerar as traduções. Tente novamente.');
+      },
+    });
+  }
+
   setTab(tab: 'edit' | 'order' | 'preview') {
     this.activeTab.set(tab);
     if (tab === 'preview') {
@@ -571,6 +686,7 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
 
     if (e.key === 'Escape') {
       if (this.viewerDrawMode()) return;
+      if (this.reprocessing()) return;
       this.close();
       return;
     }
@@ -591,11 +707,11 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
         return;
       }
 
-      if (e.key === 'ArrowLeft' && this.hasPrev()) {
+      if (e.key === 'ArrowLeft' && this.hasPrev() && !this.reprocessing()) {
         this.navigate(-1);
         return;
       }
-      if (e.key === 'ArrowRight' && this.hasNext()) {
+      if (e.key === 'ArrowRight' && this.hasNext() && !this.reprocessing()) {
         this.navigate(1);
         return;
       }

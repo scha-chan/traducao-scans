@@ -129,3 +129,9 @@ export interface RunOut {
   prompt_version: string | null;
   created_at: string;
 }
+
+export interface RegenerateResponse {
+  page: PageSummary;
+  blocos: TextBlockExport[];
+  cost_usd?: number;
+}

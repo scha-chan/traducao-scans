@@ -68,6 +68,7 @@ def build_pipeline() -> Orchestrator:
     from agent.stages.consistency import ConsistencyStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.divisa import DivisaStage  # noqa: PLC0415
+    from agent.stages.guardrails import GuardrailsStage  # noqa: PLC0415
     from agent.stages.handwritten import HandwrittenStage  # noqa: PLC0415
     from agent.stages.location import LocationStage  # noqa: PLC0415
     from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
@@ -87,7 +88,10 @@ def build_pipeline() -> Orchestrator:
         threshold=float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
     )
     translation_cache = TranslationCache()
-    llm_translation_provider = ClaudeTranslationProvider(cache=translation_cache)
+    llm_translation_provider = ClaudeTranslationProvider(
+        cache=translation_cache,
+        fallback_model=os.environ.get("ANTHROPIC_TRANSLATION_FALLBACK_MODEL"),
+    )
     translation = TranslationStage(provider=llm_translation_provider)
     handwritten = HandwrittenStage()
     divisa = DivisaStage()
@@ -108,5 +112,6 @@ def build_pipeline() -> Orchestrator:
             location,
             translation,
             ConsistencyStage(),
+            GuardrailsStage(),
         ]
     )

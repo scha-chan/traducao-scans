@@ -200,7 +200,9 @@ def test_different_prompt_versions_have_separate_cache_entries() -> None:
     llm_json = _llm_response_json()
     call_count = 0
 
-    def fake_call_api(system_prompt: str, messages: list[dict[str, str]]) -> tuple[str, int, int]:
+    def fake_call_api(
+        system_prompt: str, messages: list[dict[str, str]], model: str | None = None
+    ) -> tuple[str, int, int]:
         nonlocal call_count
         call_count += 1
         return llm_json, 10, 5

@@ -126,3 +126,4 @@ class PageAnalysisState:
     dialogues: list[DialogueState] = field(default_factory=list)
     spans: list[ProviderSpan] = field(default_factory=list)
     agent_log: list[AgentLogEntry] = field(default_factory=list)
+    prompt_version: str = "v1"

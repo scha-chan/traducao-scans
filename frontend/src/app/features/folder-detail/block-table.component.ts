@@ -165,6 +165,20 @@ export class BlockTableComponent implements OnChanges {
     this.moveUp(i + 1, event);
   }
 
+  reorderAt(from: number, to: number) {
+    const n = this.form.length;
+    if (from === to || from < 0 || to < 0 || from >= n || to >= n) return;
+    const control = this.form.at(from);
+    this.form.removeAt(from, { emitEvent: false });
+    this.form.insert(to, control, { emitEvent: false });
+    this.form.markAsDirty();
+    const sel = this.selectedIndex();
+    if (sel === null) return;
+    if (sel === from) { this.selectedIndex.set(to); return; }
+    if (from < to && sel > from && sel <= to) this.selectedIndex.update((s) => (s ?? 0) - 1);
+    else if (from > to && sel >= to && sel < from) this.selectedIndex.update((s) => (s ?? 0) + 1);
+  }
+
   // ── Add / delete block ─────────────────────────────────────────────────────
 
   addBlock() {

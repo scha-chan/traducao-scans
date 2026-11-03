@@ -46,6 +46,31 @@ export class PageImageViewerComponent implements OnDestroy {
   readonly drawModeActive = signal(false);
   readonly isDrawing = signal(false);
   readonly drawPreviewRect = signal<BboxPx | null>(null);
+  readonly showOrderLines = signal(false);
+
+  private imgNatW = 1;
+  private imgNatH = 1;
+  private imgDispW = 1;
+  private imgDispH = 1;
+
+  /** SVG points and lines for reading-order overlay, in display pixel coords. */
+  readonly orderOverlay = computed(() => {
+    if (!this.showOrderLines()) return { points: [], lines: [] as {x1:number;y1:number;x2:number;y2:number}[] };
+    const sx = this.imgDispW / this.imgNatW;
+    const sy = this.imgDispH / this.imgNatH;
+    const pts = [...this.blocks()]
+      .filter((b) => b.bbox && b.ordem != null)
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+      .map((b) => ({
+        cx: Math.round((b.bbox!.x + b.bbox!.w / 2) * sx),
+        cy: Math.round((b.bbox!.y + b.bbox!.h / 2) * sy),
+        order: b.ordem!,
+      }));
+    const lines = pts.slice(1).map((p, i) => ({
+      x1: pts[i].cx, y1: pts[i].cy, x2: p.cx, y2: p.cy,
+    }));
+    return { points: pts, lines };
+  });
 
   private drawStartSvg = {x: 0, y: 0};
   private isDragging = false;
@@ -78,6 +103,21 @@ export class PageImageViewerComponent implements OnDestroy {
     this.isDrawing.set(false);
     this.drawPreviewRect.set(null);
     this.drawModeChange.emit(next);
+  }
+
+  toggleOrderLines() {
+    this.showOrderLines.update((v) => !v);
+  }
+
+  onImageLoad() {
+    const img = this.imageRef?.nativeElement;
+    if (img) {
+      this.imgNatW = img.naturalWidth || 1;
+      this.imgNatH = img.naturalHeight || 1;
+      this.imgDispW = img.offsetWidth || 1;
+      this.imgDispH = img.offsetHeight || 1;
+    }
+    this.imageLoading.set(false);
   }
 
   // -------------------------------------------------------------------------

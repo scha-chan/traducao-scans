@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut } from './models';
+import { PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -48,5 +48,9 @@ export class PagesApi extends ApiBase {
 
   getRuns(pageId: string): Observable<RunOut[]> {
     return this.http.get<RunOut[]>(this.url(`/api/pages/${pageId}/runs`));
+  }
+
+  reorderAuto(pageId: string): Observable<ReorderAutoOut> {
+    return this.http.post<ReorderAutoOut>(this.url(`/api/pages/${pageId}/reorder/auto`), null);
   }
 }

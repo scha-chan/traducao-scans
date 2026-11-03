@@ -257,3 +257,79 @@ async def test_stage_noop_on_empty_state() -> None:
     stage = ReadingOrderStage()
     result = await stage.run(state)
     assert result.dialogues == []
+
+
+# ---------------------------------------------------------------------------
+# Tiebreak rules (PRD §6.1 rule 6)
+# ---------------------------------------------------------------------------
+
+
+def test_tiebreak_centre_x_desc_within_column() -> None:
+    """Within a column, blocks at the same top-y are ordered by centre-x descending."""
+    # Both blocks share a column (exactly 50% horizontal overlap)
+    # a: x=300, width=200 → cx=400, right=500
+    # b: x=200, width=200 → cx=300, right=400
+    # overlap = min(500,400)-max(300,200) = 100; min_w=200 → 0.50 → same column
+    a = _make_dialogue(x=300, y=100, width=200, height=50, did="a")  # cx=400
+    b = _make_dialogue(x=200, y=100, width=200, height=50, did="b")  # cx=300
+
+    strategy = ColumnRtlStrategy()
+    ordered = strategy.order([b, a], 750, 1200, [])
+    assert [d.id for d in ordered] == ["a", "b"]
+
+
+def test_tiebreak_centre_y_asc_within_column() -> None:
+    """Blocks with same top-y and same centre-x use centre-y as final tiebreak (ascending)."""
+    # Both at x=300, y=0, same width → same top-y, same cx
+    # a: height=200 → cy=100; b: height=100 → cy=50 → b comes first
+    a = _make_dialogue(x=300, y=0, width=100, height=200, did="a")  # cy=100
+    b = _make_dialogue(x=300, y=0, width=100, height=100, did="b")  # cy=50
+
+    strategy = ColumnRtlStrategy()
+    ordered = strategy.order([a, b], 750, 1200, [])
+    assert [d.id for d in ordered] == ["b", "a"]
+
+
+# ---------------------------------------------------------------------------
+# Overlap threshold boundary (PRD §6.1 rule 3)
+# ---------------------------------------------------------------------------
+
+
+def test_column_grouping_at_threshold() -> None:
+    """Exactly 50% horizontal overlap → same column; just below 50% → separate columns."""
+    a = _make_dialogue(x=0, y=0, width=100, height=50, did="a")
+
+    # overlap = 50, min_w = 100 → 0.50 → merged
+    b_at = _make_dialogue(x=50, y=60, width=100, height=50, did="b_at")
+    cols_at = _group_into_columns([a, b_at], overlap_threshold=0.50)
+    assert len(cols_at) == 1
+
+    # overlap = 49, min_w = 100 → 0.49 → separate
+    b_below = _make_dialogue(x=51, y=60, width=100, height=50, did="b_below")
+    cols_below = _group_into_columns([a, b_below], overlap_threshold=0.50)
+    assert len(cols_below) == 2
+
+
+# ---------------------------------------------------------------------------
+# Dialogues outside tier boundaries (PRD §6.1 — unordered fallback)
+# ---------------------------------------------------------------------------
+
+
+def test_dialogues_outside_tier_boundaries_appended() -> None:
+    """Blocks whose centre-y falls outside all tier ranges are appended at the end."""
+    in_tier = _make_dialogue(x=600, y=10, width=80, height=50, did="in_tier")
+    # centre_y = 1025 — falls beyond page_height=900
+    out_of_range = _make_dialogue(x=600, y=1000, width=80, height=50, did="out_of_range")
+
+    strategy = TieredColumnRtlStrategy()
+    ordered = strategy.order(
+        [out_of_range, in_tier],
+        page_width=750,
+        page_height=900,
+        panel_divisa_ys=[548],
+    )
+
+    ids = [d.id for d in ordered]
+    assert ids == ["in_tier", "out_of_range"]
+    assert ordered[0].order == 1
+    assert ordered[1].order == 2

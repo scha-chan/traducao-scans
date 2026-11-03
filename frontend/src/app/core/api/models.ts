@@ -75,6 +75,11 @@ export interface AnalyzeResponse {
   run_id: string;
 }
 
+export interface ReorderAutoOut {
+  blocos: TextBlockExport[];
+  reordered_count: number;
+}
+
 export interface RunOut {
   id: string;
   run_type: string;

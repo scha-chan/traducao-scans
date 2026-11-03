@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     debug: bool = False
     upload_dir: str = "uploads"
     ocr_low_confidence_threshold: float = 0.80
+    export_policy: str = "require_approved"
+    budget_usd_per_run: float = 0.10
     cors_origins: list[str] = ["http://localhost:4200", "http://localhost:3000"]
 
 

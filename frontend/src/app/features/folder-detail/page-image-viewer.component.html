@@ -46,6 +46,27 @@
       </svg>
       <span class="draw-btn-label">Região</span>
     </button>
+
+    <span class="zoom-divider" aria-hidden="true"></span>
+
+    <button
+      type="button"
+      class="zoom-btn draw-btn"
+      [class.draw-btn--active]="showOrderLines()"
+      (click)="toggleOrderLines()"
+      [attr.aria-pressed]="showOrderLines()"
+      aria-label="Ordem de leitura"
+      title="Exibir ordem de leitura"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <circle cx="3" cy="3" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="11" cy="7" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="3" cy="11" r="2" fill="currentColor" stroke="none"/>
+        <line x1="3" y1="5" x2="11" y2="7" stroke-dasharray="2 1"/>
+        <line x1="11" y1="7" x2="3" y2="9" stroke-dasharray="2 1"/>
+      </svg>
+      <span class="draw-btn-label">Ordem</span>
+    </button>
   </div>
 
   <!-- Image + SVG overlay -->
@@ -69,7 +90,7 @@
         class="page-image"
         [class.hidden]="imageLoading()"
         draggable="false"
-        (load)="imageLoading.set(false)"
+        (load)="onImageLoad()"
         (error)="imageLoading.set(false)"
       />
 
@@ -91,6 +112,33 @@
             fill="oklch(0.637 0.237 25.331)"
             class="select-none"
           >{{ (selectedBlockIndex() ?? 0) + 1 }}</text>
+        }
+
+        <!-- Reading order overlay -->
+        @if (showOrderLines()) {
+          @let ov = orderOverlay();
+          @for (ln of ov.lines; track $index) {
+            <line
+              [attr.x1]="ln.x1" [attr.y1]="ln.y1"
+              [attr.x2]="ln.x2" [attr.y2]="ln.y2"
+              stroke="oklch(0.55 0.22 145)"
+              stroke-width="1.5"
+              stroke-dasharray="5 3"
+              stroke-linecap="round"
+            />
+          }
+          @for (pt of ov.points; track pt.order) {
+            <circle
+              [attr.cx]="pt.cx" [attr.cy]="pt.cy" r="9"
+              fill="oklch(0.55 0.22 145 / 0.85)"
+            />
+            <text
+              [attr.x]="pt.cx" [attr.y]="pt.cy + 4"
+              font-size="9" font-family="monospace" font-weight="bold"
+              text-anchor="middle" fill="white"
+              class="select-none pointer-events-none"
+            >{{ pt.order }}</text>
+          }
         }
 
         <!-- Draw mode: crosshair guide + preview rect -->

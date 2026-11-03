@@ -127,3 +127,5 @@ class PageAnalysisState:
     spans: list[ProviderSpan] = field(default_factory=list)
     agent_log: list[AgentLogEntry] = field(default_factory=list)
     prompt_version: str = "v1"
+    characters: list[str] = field(default_factory=list)
+    approved_translations: dict[str, str] = field(default_factory=dict)

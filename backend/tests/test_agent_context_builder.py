@@ -33,12 +33,32 @@ from app.db.models import (  # noqa: E402
     Work,
 )
 
-_ALL_TABLES = Base.metadata.tables
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+def _remove_deferrable_constraints() -> list[object]:
+    """Temporarily remove DEFERRABLE UniqueConstraints from TextBlock for SQLite.
+
+    SQLite does not support DEFERRABLE on table constraints; we pull them out
+    before create_all and restore them afterwards so other tests are unaffected.
+    """
+    from sqlalchemy import UniqueConstraint  # noqa: PLC0415
+
+    removed = [
+        c
+        for c in list(TextBlock.__table__.constraints)
+        if isinstance(c, UniqueConstraint) and getattr(c, "deferrable", False)
+    ]
+    for c in removed:
+        TextBlock.__table__.constraints.discard(c)
+    return removed
+
+
+def _restore_constraints(removed: list[object]) -> None:
+    for c in removed:
+        TextBlock.__table__.constraints.add(c)  # type: ignore[arg-type]
 
 
 @pytest.fixture
@@ -46,8 +66,10 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine("sqlite+aiosqlite://")
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+    removed = _remove_deferrable_constraints()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    _restore_constraints(removed)
 
     async with session_factory() as s:
         yield s

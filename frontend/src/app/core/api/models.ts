@@ -75,6 +75,44 @@ export interface AnalyzeResponse {
   run_id: string;
 }
 
+export type SpeechRegister = 'formal' | 'informal' | 'childlike' | 'rough' | 'polite';
+export type Gender = 'male' | 'female' | 'unknown';
+
+export interface Character {
+  id: string;
+  work_id: string;
+  name_original: string;
+  name_preferred: string | null;
+  gender: Gender | null;
+  speech_register: SpeechRegister | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CharacterCreate {
+  name_original: string;
+  name_preferred?: string | null;
+  gender?: Gender | null;
+  speech_register?: SpeechRegister | null;
+  notes?: string | null;
+}
+
+export interface CharacterUpdate {
+  name_original?: string | null;
+  name_preferred?: string | null;
+  gender?: Gender | null;
+  speech_register?: SpeechRegister | null;
+  notes?: string | null;
+}
+
+export interface WorkSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ReorderAutoOut {
   blocos: TextBlockExport[];
   reordered_count: number;

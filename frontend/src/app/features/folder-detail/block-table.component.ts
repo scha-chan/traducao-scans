@@ -8,6 +8,7 @@ import {
   signal,
   inject,
 } from '@angular/core';
+export type BlockSaveState = 'idle' | 'saving' | 'saved' | 'error';
 import {
   ReactiveFormsModule,
   FormArray,
@@ -46,6 +47,7 @@ export class BlockTableComponent implements OnChanges {
 
   readonly blocks = input.required<TextBlockExport[]>();
   readonly loading = input<boolean>(false);
+  readonly saveState = input<BlockSaveState>('idle');
 
   readonly selectedIndex = signal<number | null>(null);
   readonly form = this.fb.array<FormGroup<BlockForm>>([]);

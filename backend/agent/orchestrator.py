@@ -39,20 +39,29 @@ class Orchestrator:
         return state
 
 
-def build_translate_only_pipeline() -> Orchestrator:
-    """Construct a translate-only pipeline (skips detection and OCR stages)."""
+def _build_translation_stage() -> Stage:
+    """Return a TranslationStage backed by Claude (if ANTHROPIC_API_KEY is set) or Marian."""
     import os  # noqa: PLC0415
 
-    from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.translation import TranslationStage  # noqa: PLC0415
 
-    translation = TranslationStage(
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        from agent.providers.llm_translation import ClaudeTranslationProvider  # noqa: PLC0415
+
+        return TranslationStage(provider=ClaudeTranslationProvider())
+    from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
+
+    return TranslationStage(
         provider=MarianTranslationProvider(
             ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
             en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
         )
     )
-    return Orchestrator(stages=[translation])
+
+
+def build_translate_only_pipeline() -> Orchestrator:
+    """Construct a translate-only pipeline (skips detection and OCR stages)."""
+    return Orchestrator(stages=[_build_translation_stage()])
 
 
 def build_pipeline() -> Orchestrator:
@@ -61,7 +70,6 @@ def build_pipeline() -> Orchestrator:
 
     from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
     from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
-    from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.classification import ClassificationStage  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
@@ -72,7 +80,6 @@ def build_pipeline() -> Orchestrator:
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
     from agent.stages.reading_order import ReadingOrderStage  # noqa: PLC0415
-    from agent.stages.translation import TranslationStage  # noqa: PLC0415
 
     detection = DetectionStage(
         provider=ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
@@ -84,12 +91,7 @@ def build_pipeline() -> Orchestrator:
     confidence = LowConfidenceStage(
         threshold=float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
     )
-    translation = TranslationStage(
-        provider=MarianTranslationProvider(
-            ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
-            en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
-        )
-    )
+    translation = _build_translation_stage()
     handwritten = HandwrittenStage()
     divisa = DivisaStage()
     reading_order = ReadingOrderStage()

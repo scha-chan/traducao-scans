@@ -24,3 +24,6 @@ python-multipart==0.0.12
 # Queue
 arq==0.26.1
 redis==5.0.8
+
+# LLM translation
+anthropic>=0.40.0

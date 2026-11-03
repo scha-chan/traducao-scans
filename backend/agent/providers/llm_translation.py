@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field, ValidationError
 
 from agent.cache import TranslationCache, dialogue_cache_key
+from agent.cost import estimate_cost_usd
 from agent.state import (
     AgentLogEntry,
     DialogueState,
@@ -25,6 +26,7 @@ from agent.state import (
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "claude-haiku-5-5"
+_MAX_COST_PER_PAGE_USD: float = float(os.environ.get("MAX_COST_PER_PAGE_USD") or "0.05")
 _DEFAULT_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
 
@@ -321,18 +323,41 @@ class ClaudeTranslationProvider:
     ) -> None:
         if state is None:
             return
+        model_used = model or self._model
+        cost_usd = estimate_cost_usd(model_used, input_tokens, output_tokens)
         run_id = str(state.run_id)
         span = ProviderSpan(
             span_id=str(uuid.uuid4()),
             run_id=run_id,
             stage="translation",
             provider="claude",
-            model_version=model or self._model,
+            model_version=model_used,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=latency_ms,
-            cost_usd=0.0,
+            cost_usd=cost_usd,
             success=success,
             fallback_used=fallback_used,
         )
         state.spans.append(span)
+        self._check_budget(state)
+
+    def _check_budget(self, state: PageAnalysisState) -> None:
+        max_cost = float(os.environ.get("MAX_COST_PER_PAGE_USD") or _MAX_COST_PER_PAGE_USD)
+        total = sum(s.cost_usd for s in state.spans if s.stage == "translation")
+        if total > max_cost:
+            logger.warning(
+                "budget_guard cost_usd=%.6f exceeds limit=%.6f run_id=%s",
+                total,
+                max_cost,
+                state.run_id,
+            )
+            state.agent_log.append(
+                AgentLogEntry(
+                    timestamp=datetime.now(UTC),
+                    stage="budget_guard",
+                    trigger="cost_exceeded",
+                    action="alert",
+                    detail={"cost_usd": total, "limit_usd": max_cost},
+                )
+            )

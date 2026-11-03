@@ -422,8 +422,95 @@ async def save_page_json(
     )
 
 
+class ReorderAutoOut(BaseModel):
+    blocos: list[TextBlockExport]
+    reordered_count: int
+
+
 class BlockOrderIn(BaseModel):
     block_ids: list[UUID] = Field(..., min_length=1)
+
+
+@router.post("/{page_id}/reorder/auto", response_model=ReorderAutoOut)
+async def reorder_auto(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ReorderAutoOut:
+    """Recalculate block reading order from stored bboxes using the same pipeline stages."""
+    from agent.stages.divisa import DivisaStage  # noqa: PLC0415
+    from agent.stages.reading_order import ReadingOrderStage  # noqa: PLC0415
+    from agent.state import BBox, DialogueState, PageAnalysisState  # noqa: PLC0415
+
+    page = await _get_or_404(page_id, db)
+
+    if page.status == PageStatus.PROCESSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A página está sendo processada, tente em instantes",
+        )
+
+    result = await db.execute(
+        select(TextBlock)
+        .where(TextBlock.page_id == page_id)
+        .options(selectinload(TextBlock.translation_suggestions))
+    )
+    blocks = list(result.scalars().all())
+
+    if not blocks:
+        return ReorderAutoOut(blocos=[], reordered_count=0)
+
+    blocks_with_bbox = [b for b in blocks if b.bbox]
+    blocks_without_bbox = [b for b in blocks if not b.bbox]
+
+    if not blocks_with_bbox:
+        ordered = sorted(blocks, key=lambda b: b.order_number)
+        return ReorderAutoOut(blocos=[_block_to_export(b) for b in ordered], reordered_count=0)
+
+    from uuid import uuid4 as _uuid4  # noqa: PLC0415
+
+    dialogues = [
+        DialogueState(id=str(b.id), bbox=BBox.from_dict(b.bbox))  # type: ignore[arg-type]
+        for b in blocks_with_bbox
+    ]
+    state = PageAnalysisState(
+        page_id=page_id,
+        run_id=_uuid4(),
+        image_path=page.file_path,
+        page_width=page.width,
+        page_height=page.height,
+        dialogues=dialogues,
+    )
+
+    state = await DivisaStage().run(state)
+    state = await ReadingOrderStage().run(state)
+
+    new_order_by_id: dict[str, int] = {
+        d.id: d.order for d in state.dialogues if d.order is not None
+    }
+
+    total = len(blocks)
+    # Use temp values above total to avoid unique-constraint conflicts during flush
+    for i, b in enumerate(blocks):
+        b.order_number = total + 1 + i
+    await db.flush()
+
+    for b in blocks_with_bbox:
+        b.order_number = new_order_by_id.get(str(b.id), total)
+
+    max_bbox_order = max(new_order_by_id.values(), default=0)
+    for i, b in enumerate(blocks_without_bbox):
+        b.order_number = max_bbox_order + 1 + i
+
+    await db.commit()
+
+    all_blocks = sorted(blocks, key=lambda b: b.order_number)
+    for b in all_blocks:
+        await db.refresh(b)
+
+    return ReorderAutoOut(
+        blocos=[_block_to_export(b) for b in all_blocks],
+        reordered_count=len(blocks_with_bbox),
+    )
 
 
 @router.put("/{page_id}/blocks/order", response_model=list[TextBlockExport])

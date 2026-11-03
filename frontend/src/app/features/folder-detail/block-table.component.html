@@ -184,64 +184,9 @@
         <!-- Translations -->
         <div>
           <p class="field-label mb-1">Sugestões de tradução</p>
-          <div class="space-y-2">
-            @if (selectedTranslations(); as fa) {
-              @for (t of fa.controls; track $index; let ti = $index) {
-                <div class="flex gap-1.5 items-start" [formGroup]="t">
-                  <!-- Relevância -->
-                  <select
-                    formControlName="relevancia"
-                    class="h-6 w-10 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-600 dark:text-zinc-400 text-center focus:outline-none focus:ring-1 focus:ring-primary-500 flex-shrink-0"
-                    (blur)="sortTranslationsOnBlurSelected()"
-                    aria-label="Relevância da tradução {{ ti + 1 }}"
-                  >
-                    @for (n of RELEVANCE_OPTIONS; track n) {
-                      <option [value]="n">{{ n }}</option>
-                    }
-                  </select>
-
-                  <!-- Tradução -->
-                  <textarea
-                    formControlName="traducao"
-                    class="field-textarea flex-1 min-w-0"
-                    placeholder="Tradução..."
-                    rows="1"
-                    aria-label="Tradução {{ ti + 1 }}"
-                    [class.border-primary-600]="t.controls.traducao.invalid && t.controls.traducao.touched"
-                  ></textarea>
-
-                  <!-- Observação -->
-                  <input
-                    formControlName="observacao"
-                    class="field-input w-20 flex-shrink-0"
-                    placeholder="Obs."
-                    aria-label="Observação {{ ti + 1 }}"
-                  />
-
-                  <!-- Remove -->
-                  <button
-                    type="button"
-                    class="icon-btn text-zinc-400 hover:text-red-500 dark:hover:text-red-400 flex-shrink-0 mt-0.5"
-                    (click)="removeTranslationFromSelected(ti, $event)"
-                    [disabled]="fa.length <= 1"
-                    aria-label="Remover tradução {{ ti + 1 }}"
-                  >
-                    <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-                    </svg>
-                  </button>
-                </div>
-              }
-
-              @if (fa.length < 5) {
-                <button
-                  type="button"
-                  class="text-xs text-primary-600 dark:text-primary-400 hover:underline"
-                  (click)="addTranslationToSelected($event)"
-                >+ tradução</button>
-              }
-            }
-          </div>
+          @if (selectedTranslations(); as fa) {
+            <app-translation-list [control]="fa" />
+          }
         </div>
 
       </div><!-- /form -->

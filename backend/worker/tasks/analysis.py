@@ -8,8 +8,10 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agent.orchestrator import build_pipeline
+from agent.prompt_loader import load_prompt
 from agent.state import PageAnalysisState
 from app.db.models import Page, PageStatus, ProcessingRun, RunStatus, RunType, TextBlock
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
 
         run.started_at = datetime.now(UTC)
         run.status = RunStatus.RUNNING
+        _, run.prompt_version = load_prompt(settings.prompt_file)
         await db.commit()
 
         try:

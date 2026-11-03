@@ -85,6 +85,9 @@ class ClaudeTranslationProvider:
 
     def _load_system_prompt(self, prompt_version: str) -> str:
         prompt_path = self._prompts_dir / f"translate_page.{prompt_version}.txt"
+        if not prompt_path.exists():
+            logger.warning("Prompt version %s not found, falling back to v1", prompt_version)
+            prompt_path = self._prompts_dir / "translate_page.v1.txt"
         return prompt_path.read_text(encoding="utf-8")
 
     def _build_user_message(self, dialogue: DialogueState) -> str:
@@ -133,7 +136,8 @@ class ClaudeTranslationProvider:
         prompt_version: str,
         state: PageAnalysisState | None = None,
     ) -> list[TranslationCandidate]:
-        system_prompt = self._load_system_prompt(prompt_version)
+        effective_version = state.prompt_version if state is not None else prompt_version
+        system_prompt = self._load_system_prompt(effective_version)
         user_message = self._build_user_message(dialogue)
         messages: list[dict[str, str]] = [{"role": "user", "content": user_message}]
 

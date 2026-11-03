@@ -39,6 +39,22 @@ class Orchestrator:
         return state
 
 
+def build_translate_only_pipeline() -> Orchestrator:
+    """Construct a translate-only pipeline (skips detection and OCR stages)."""
+    import os  # noqa: PLC0415
+
+    from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
+    from agent.stages.translation import TranslationStage  # noqa: PLC0415
+
+    translation = TranslationStage(
+        provider=MarianTranslationProvider(
+            ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
+            en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
+        )
+    )
+    return Orchestrator(stages=[translation])
+
+
 def build_pipeline() -> Orchestrator:
     """Construct the default full-analysis pipeline."""
     import os  # noqa: PLC0415

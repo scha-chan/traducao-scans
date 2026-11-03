@@ -4,13 +4,22 @@ from typing import Any
 from uuid import UUID
 
 from arq import Retry
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from agent.orchestrator import build_pipeline
+from agent.orchestrator import build_pipeline, build_translate_only_pipeline
 from agent.prompt_loader import load_prompt
-from agent.state import PageAnalysisState
-from app.db.models import Page, PageStatus, ProcessingRun, RunStatus, RunType, TextBlock
+from agent.state import BBox, DialogueState, PageAnalysisState
+from app.db.models import (
+    BlockSource,
+    Page,
+    PageStatus,
+    ProcessingRun,
+    RunStatus,
+    RunType,
+    TextBlock,
+    TranslationSuggestion,
+)
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -87,17 +96,17 @@ async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
     if page is None:
         raise ValueError(f"Page {page_id} not found")
 
-    initial_state = PageAnalysisState(
-        page_id=page_id,
-        run_id=run.id,
-        image_path=page.file_path,
-    )
-
     if run.run_type == RunType.FULL:
         await db.execute(delete(TextBlock).where(TextBlock.page_id == page_id))
-
-    orchestrator = build_pipeline()
-    final_state = await orchestrator.run(initial_state)
+        initial_state = PageAnalysisState(
+            page_id=page_id,
+            run_id=run.id,
+            image_path=page.file_path,
+        )
+        orchestrator = build_pipeline()
+        final_state = await orchestrator.run(initial_state)
+    else:
+        final_state = await _run_translate_only(db, page, run)
 
     run.model_metadata = {
         "spans": [s.to_dict() for s in final_state.spans],
@@ -105,3 +114,54 @@ async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
     }
 
     return len(final_state.dialogues)
+
+
+async def _run_translate_only(
+    db: AsyncSession, page: Page, run: ProcessingRun
+) -> PageAnalysisState:
+    """Delete AUTO suggestions, run only TranslationStage, persist new suggestions."""
+    blocks_result = await db.execute(select(TextBlock).where(TextBlock.page_id == page.id))
+    blocks = list(blocks_result.scalars().all())
+
+    if blocks:
+        block_ids = [b.id for b in blocks]
+        await db.execute(
+            delete(TranslationSuggestion).where(
+                TranslationSuggestion.text_block_id.in_(block_ids),
+                TranslationSuggestion.source == BlockSource.AUTO,
+            )
+        )
+        await db.flush()
+
+    dialogues = [
+        DialogueState(
+            id=str(b.id),
+            bbox=BBox.from_dict(b.bbox) if b.bbox else BBox(0, 0, 0, 0),
+            original=b.original,
+        )
+        for b in blocks
+        if b.original
+    ]
+
+    initial_state = PageAnalysisState(
+        page_id=page.id,
+        run_id=run.id,
+        image_path=page.file_path,
+        dialogues=dialogues,
+    )
+
+    final_state = await build_translate_only_pipeline().run(initial_state)
+
+    for dialogue in final_state.dialogues:
+        for candidate in dialogue.translations:
+            db.add(
+                TranslationSuggestion(
+                    text_block_id=UUID(dialogue.id),
+                    translation=candidate.translation,
+                    observation=candidate.observation,
+                    relevance=candidate.relevance,
+                    source=BlockSource.AUTO,
+                )
+            )
+
+    return final_state

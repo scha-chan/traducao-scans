@@ -247,6 +247,51 @@ class AnalyzeOut(BaseModel):
     run_id: UUID
 
 
+class RegenerateOut(BaseModel):
+    run_id: UUID
+    status: str
+
+
+@router.post(
+    "/{page_id}/regenerate",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=RegenerateOut,
+)
+async def regenerate_page(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> RegenerateOut:
+    """Enqueue a TRANSLATE_ONLY run (preserves OCR blocks, replaces AUTO suggestions)."""
+    page = await _get_or_404(page_id, db)
+
+    if page.status == PageStatus.PROCESSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ALREADY_PROCESSING",
+                "message": "Esta página já está sendo processada",
+            },
+        )
+
+    run = ProcessingRun(page_id=page_id, run_type=RunType.TRANSLATE_ONLY)
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
+    pool = await queue.get_pool()
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        page.status = PageStatus.ERROR
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de regeneração",
+        )
+
+    return RegenerateOut(run_id=run.id, status="PROCESSING")
+
+
 @router.post("/{page_id}/analyze", status_code=status.HTTP_202_ACCEPTED, response_model=AnalyzeOut)
 async def analyze_page_async(
     page_id: UUID,

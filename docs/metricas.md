@@ -64,6 +64,40 @@ Apenas blocos com gabarito explícito de `lines` em `gabarito.meta.json` são in
 
 ---
 
+---
+
+## Classificação #/$ — F4-AG-02 / F4-QA-02
+
+Script: `evals/golden_metrics.py` · Gabarito: `docs/referencias/` · Executado: 2026-11-02
+
+| Imagem    | Blocos | Corretos | Acurácia |
+|-----------|--------|----------|----------|
+| pagina_01 | 12 | 10 | 83.3% |
+| banner_01 | 4 | 4 | 100.0% |
+| **Total** | **16** | **14** | **87.5%** |
+
+> **Meta F4:** ≥ 90% — ❌ abaixo da meta
+
+### Erros de classificação
+
+- **pagina_01** bloco 1: previsto `$`, esperado `#` (conf 0.71)
+- **pagina_01** bloco 2: previsto `$`, esperado `#` (conf 0.78)
+
+---
+
+## Ordem de leitura — F4-AG-01 / F4-QA-02
+
+Script: `evals/golden_metrics.py` · Gabarito: `gabarito.meta.json` · Executado: 2026-11-02
+
+| Imagem    | Blocos | Ordem 100% correta |
+|-----------|--------|--------------------|
+| pagina_01 | 12 | ✅ Sim |
+| banner_01 | 4 | ✅ Sim |
+| **Total** | — | **2/2 (100.0%)** |
+
+> **Meta F4:** 100% das páginas do golden set — ✅ atingida
+
+
 ## Metas a fixar antes do fim de F4
 
 - **Recall de detecção:** ≥ 0,85 (meta provisória, calibrar após linha de base)

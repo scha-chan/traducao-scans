@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   Component,
   ElementRef,
   HostListener,
@@ -11,6 +12,7 @@ import {
   signal,
   inject,
 } from '@angular/core';
+import { debounceTime } from 'rxjs';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
 import { ReorderAutoOut } from '../../core/api/models';
 import { BboxPx, FolderDetail, PageExport, PageSummary, TextBlockExport } from '../../core/api/models';
@@ -18,7 +20,7 @@ import { PagesApi } from '../../core/api/pages.api';
 import { buildPageLines } from '../../export/txt-export';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { PageImageViewerComponent } from './page-image-viewer.component';
-import { BlockTableComponent } from './block-table.component';
+import { BlockSaveState, BlockTableComponent } from './block-table.component';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -164,6 +166,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
                 <app-block-table
                   [blocks]="blocks()"
                   [loading]="blocksLoading()"
+                  [saveState]="blockSaveState()"
                   (selectedIndexChange)="onBlockSelected($event)"
                 />
               }
@@ -322,7 +325,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
     }
   `,
 })
-export class PageReviewModalComponent implements OnInit, OnDestroy {
+export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly pagesApi = inject(PagesApi);
 
   readonly tabs = TABS;
@@ -364,9 +367,14 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
   readonly reordering = signal(false);
   readonly orderFocusedIndex = signal<number | null>(null);
 
+  readonly blockSaveState = signal<BlockSaveState>('idle');
+
   private blocksSub?: import('rxjs').Subscription;
   private saveSub?: import('rxjs').Subscription;
   private reorderSub?: import('rxjs').Subscription;
+  private debounceSub?: import('rxjs').Subscription;
+  private autoSaveApiSub?: import('rxjs').Subscription;
+  private savedTimeout?: ReturnType<typeof setTimeout>;
   private previousActiveElement: Element | null = null;
 
   ngOnInit() {
@@ -376,13 +384,22 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     this.loadBlocks();
   }
 
+  ngAfterViewInit() {
+    this.debounceSub = this.blockTable.form.valueChanges
+      .pipe(debounceTime(800))
+      .subscribe(() => this.autoSave());
+  }
+
   ngOnDestroy() {
     document.body.style.overflow = '';
     this.blocksSub?.unsubscribe();
     this.saveSub?.unsubscribe();
     this.reorderSub?.unsubscribe();
+    this.debounceSub?.unsubscribe();
+    this.autoSaveApiSub?.unsubscribe();
     clearTimeout(this.smallRectTimeout);
     clearTimeout(this.saveErrorTimeout);
+    clearTimeout(this.savedTimeout);
     (this.previousActiveElement as HTMLElement | null)?.focus();
   }
 
@@ -391,6 +408,9 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
     this.previewLines.set([]);
     this.blocksLoading.set(true);
     this.blocksError.set(false);
+    this.blockSaveState.set('idle');
+    clearTimeout(this.savedTimeout);
+    this.autoSaveApiSub?.unsubscribe();
     this.blocksSub?.unsubscribe();
     this.blocksSub = this.pagesApi.getJson(this.page().id).subscribe({
       next: (data) => {
@@ -402,6 +422,27 @@ export class PageReviewModalComponent implements OnInit, OnDestroy {
         this.blocksLoading.set(false);
       },
     });
+  }
+
+  private autoSave() {
+    if (this.blockSaveState() === 'saving') return;
+    this.blockSaveState.set('saving');
+    this.autoSaveApiSub?.unsubscribe();
+    this.autoSaveApiSub = this.pagesApi
+      .saveJson(this.page().id, this.blockTable.toTextBlocks())
+      .subscribe({
+        next: () => {
+          this.blockSaveState.set('saved');
+          this.blockTable.markAsPristine();
+          clearTimeout(this.savedTimeout);
+          this.savedTimeout = setTimeout(() => this.blockSaveState.set('idle'), 2000);
+        },
+        error: () => {
+          this.blockSaveState.set('error');
+          clearTimeout(this.savedTimeout);
+          this.savedTimeout = setTimeout(() => this.blockSaveState.set('idle'), 3000);
+        },
+      });
   }
 
   save() {

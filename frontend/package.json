@@ -11,7 +11,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint": "eslint src",
-    "typecheck": "npm run generate:contracts && tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "npm run generate:contracts && tsc --noEmit -p tsconfig.app.json",
+    "e2e": "playwright test"
   },
   "private": true,
   "packageManager": "npm@11.12.1",
@@ -37,6 +38,8 @@
     "@angular/cli": "^22.2.0",
     "@angular/compiler-cli": "^22.2.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
     "angular-eslint": "^22.5.0",

@@ -1,5 +1,5 @@
-import enum
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -24,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
-class PageStatus(str, enum.Enum):
+class PageStatus(StrEnum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     REVIEW = "REVIEW"
@@ -32,30 +32,30 @@ class PageStatus(str, enum.Enum):
     ERROR = "ERROR"
 
 
-class RunType(str, enum.Enum):
+class RunType(StrEnum):
     FULL = "FULL"
     TRANSLATE_ONLY = "TRANSLATE_ONLY"
 
 
-class RunStatus(str, enum.Enum):
+class RunStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     ERROR = "ERROR"
 
 
-class ReviewStatus(str, enum.Enum):
+class ReviewStatus(StrEnum):
     PENDING = "PENDING"
     NEEDS_REVIEW = "NEEDS_REVIEW"
     REVIEWED = "REVIEWED"
 
 
-class BlockSource(str, enum.Enum):
+class BlockSource(StrEnum):
     AUTO = "AUTO"
     MANUAL = "MANUAL"
 
 
-class Orientation(str, enum.Enum):
+class Orientation(StrEnum):
     VERTICAL = "VERTICAL"
     HORIZONTAL = "HORIZONTAL"
 

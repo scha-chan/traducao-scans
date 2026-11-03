@@ -18,5 +18,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/folder-detail/folder-detail.page').then(m => m.FolderDetailPage),
   },
+  {
+    path: 'obras/:workId/personagens',
+    loadComponent: () =>
+      import('./features/characters/character-list.page').then(m => m.CharacterListPage),
+  },
   { path: '**', redirectTo: '' },
 ];

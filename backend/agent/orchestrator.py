@@ -65,6 +65,7 @@ def build_pipeline() -> Orchestrator:
     from agent.providers.ocr import MangaOcrProvider  # noqa: PLC0415
     from agent.stages.classification import ClassificationStage  # noqa: PLC0415
     from agent.stages.confidence import LowConfidenceStage  # noqa: PLC0415
+    from agent.stages.consistency import ConsistencyStage  # noqa: PLC0415
     from agent.stages.detection import DetectionStage  # noqa: PLC0415
     from agent.stages.divisa import DivisaStage  # noqa: PLC0415
     from agent.stages.handwritten import HandwrittenStage  # noqa: PLC0415
@@ -106,5 +107,6 @@ def build_pipeline() -> Orchestrator:
             classification,
             location,
             translation,
+            ConsistencyStage(),
         ]
     )

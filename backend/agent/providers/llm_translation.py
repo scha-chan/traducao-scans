@@ -67,15 +67,20 @@ class ClaudeTranslationProvider:
 
     Reads the versioned system prompt from *prompts_dir*/<prompt_version>.txt.
     Retries up to *max_retries* times when the model returns malformed JSON.
+    If a transient API error occurs (5xx or timeout), falls back to *fallback_model*
+    when configured, recording ``fallback_used=True`` in the provider span.
     """
 
     def __init__(
         self,
         api_key: str | None = None,
-        model: str | None = None,
+        primary_model: str | None = None,
+        fallback_model: str | None = None,
         prompts_dir: str | Path | None = None,
         max_retries: int = 2,
         cache: TranslationCache | None = None,
+        # Legacy alias kept for backward compatibility
+        model: str | None = None,
     ) -> None:
         resolved_key: str = api_key or os.environ.get("ANTHROPIC_API_KEY") or ""
         if not resolved_key:
@@ -84,7 +89,12 @@ class ClaudeTranslationProvider:
                 "Set the ANTHROPIC_API_KEY environment variable or pass api_key=."
             )
         self._api_key = resolved_key
-        self._model: str = model or os.environ.get("ANTHROPIC_TRANSLATION_MODEL") or _DEFAULT_MODEL
+        # `primary_model` takes precedence; `model` is the legacy kwarg
+        effective_primary = primary_model or model
+        self._model: str = (
+            effective_primary or os.environ.get("ANTHROPIC_TRANSLATION_MODEL") or _DEFAULT_MODEL
+        )
+        self._fallback_model: str | None = fallback_model
         self._prompts_dir = Path(prompts_dir) if prompts_dir is not None else _DEFAULT_PROMPTS_DIR
         self._max_retries = max_retries
         self._cache = cache
@@ -116,13 +126,15 @@ class ClaudeTranslationProvider:
         self,
         system_prompt: str,
         messages: list[dict[str, str]],
+        model: str | None = None,
     ) -> tuple[str, int, int]:
         """Call the Anthropic API and return (response_text, input_tokens, output_tokens)."""
         import anthropic  # noqa: PLC0415
 
+        effective_model = model or self._model
         client = anthropic.Anthropic(api_key=self._api_key)
         response = client.messages.create(
-            model=self._model,
+            model=effective_model,
             max_tokens=1024,
             system=system_prompt,
             messages=messages,  # type: ignore[arg-type]
@@ -169,74 +181,132 @@ class ClaudeTranslationProvider:
 
         system_prompt = self._load_system_prompt(effective_version)
         user_message = self._build_user_message(dialogue)
-        messages: list[dict[str, str]] = [{"role": "user", "content": user_message}]
+        t0 = time.monotonic()
+
+        import anthropic as _anthropic  # noqa: PLC0415
 
         total_input = 0
         total_output = 0
-        t0 = time.monotonic()
-        last_error: str = ""
-        response_text: str = ""
+        fallback_used: bool = False
+        active_model: str = self._model
 
-        for attempt in range(self._max_retries + 1):
-            try:
-                response_text, in_tok, out_tok = self._call_api(system_prompt, messages)
+        def _attempt(model: str) -> list[TranslationCandidate] | None:
+            """Run the JSON-retry loop for *model*. Returns candidates or None on parse failure."""
+            nonlocal total_input, total_output
+            messages: list[dict[str, str]] = [{"role": "user", "content": user_message}]
+            last_error: str = ""
+            response_text: str = ""
+            for attempt in range(self._max_retries + 1):
+                response_text, in_tok, out_tok = self._call_api(
+                    system_prompt, messages, model=model
+                )
                 total_input += in_tok
                 total_output += out_tok
-                parsed = self._parse_response(response_text)
-                candidates = [
-                    TranslationCandidate(
-                        translation=c.traducao,
-                        observation=c.observacao,
-                        relevance=c.relevancia,
+                try:
+                    parsed = self._parse_response(response_text)
+                    return [
+                        TranslationCandidate(
+                            translation=c.traducao,
+                            observation=c.observacao,
+                            relevance=c.relevancia,
+                        )
+                        for c in parsed.candidates
+                    ]
+                except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                    last_error = str(exc)
+                    logger.warning(
+                        "llm_translation attempt=%d/%d failed dialogue=%s: %s",
+                        attempt + 1,
+                        self._max_retries + 1,
+                        dialogue.id,
+                        last_error,
                     )
-                    for c in parsed.candidates
-                ]
+                    if attempt < self._max_retries:
+                        messages.append({"role": "assistant", "content": response_text})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Your previous response was not valid JSON or did not match "
+                                    f"the required schema. Error: {last_error}\n"
+                                    "Please respond again with ONLY the JSON object as specified."
+                                ),
+                            }
+                        )
+            return None  # all parse attempts exhausted
+
+        try:
+            candidates = _attempt(active_model)
+        except (_anthropic.APIStatusError, _anthropic.APITimeoutError) as exc:
+            if self._fallback_model is None:
                 self._record_span(
                     dialogue=dialogue,
                     state=state,
                     input_tokens=total_input,
                     output_tokens=total_output,
                     latency_ms=int((time.monotonic() - t0) * 1000),
-                    success=True,
+                    success=False,
+                    fallback_used=False,
+                    model=active_model,
                 )
-                if self._cache is not None:
-                    self._cache.set(cache_key, candidates)
-                return candidates
-
-            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
-                last_error = str(exc)
-                logger.warning(
-                    "llm_translation attempt=%d/%d failed dialogue=%s: %s",
-                    attempt + 1,
-                    self._max_retries + 1,
-                    dialogue.id,
-                    last_error,
+                dialogue.needs_review = True
+                dialogue.review_reason = "llm_translation_failed"
+                raise
+            logger.warning(
+                "llm_translation primary_model=%s transient error, "
+                "switching to fallback_model=%s dialogue=%s: %s",
+                active_model,
+                self._fallback_model,
+                dialogue.id,
+                exc,
+            )
+            active_model = self._fallback_model
+            fallback_used = True
+            try:
+                candidates = _attempt(active_model)
+            except (_anthropic.APIStatusError, _anthropic.APITimeoutError):
+                self._record_span(
+                    dialogue=dialogue,
+                    state=state,
+                    input_tokens=total_input,
+                    output_tokens=total_output,
+                    latency_ms=int((time.monotonic() - t0) * 1000),
+                    success=False,
+                    fallback_used=True,
+                    model=active_model,
                 )
-                if attempt < self._max_retries:
-                    messages.append({"role": "assistant", "content": response_text})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Your previous response was not valid JSON or did not match the "
-                                f"required schema. Error: {last_error}\n"
-                                "Please respond again with ONLY the JSON object as specified."
-                            ),
-                        }
-                    )
+                dialogue.needs_review = True
+                dialogue.review_reason = "llm_translation_failed"
+                raise
 
-        # All attempts exhausted
+        if candidates is None:
+            self._record_span(
+                dialogue=dialogue,
+                state=state,
+                input_tokens=total_input,
+                output_tokens=total_output,
+                latency_ms=int((time.monotonic() - t0) * 1000),
+                success=False,
+                fallback_used=fallback_used,
+                model=active_model,
+            )
+            dialogue.needs_review = True
+            dialogue.review_reason = "llm_translation_failed"
+            return []
+
         self._record_span(
             dialogue=dialogue,
             state=state,
             input_tokens=total_input,
             output_tokens=total_output,
             latency_ms=int((time.monotonic() - t0) * 1000),
-            success=False,
+            success=True,
+            fallback_used=fallback_used,
+            model=active_model,
         )
-        dialogue.needs_review = True
-        dialogue.review_reason = "llm_translation_failed"
-        return []
+        if self._cache is not None:
+            self._cache.set(cache_key, candidates)
+        return candidates
 
     def _record_span(
         self,
@@ -246,6 +316,8 @@ class ClaudeTranslationProvider:
         output_tokens: int,
         latency_ms: int,
         success: bool,
+        fallback_used: bool = False,
+        model: str | None = None,
     ) -> None:
         if state is None:
             return
@@ -255,12 +327,12 @@ class ClaudeTranslationProvider:
             run_id=run_id,
             stage="translation",
             provider="claude",
-            model_version=self._model,
+            model_version=model or self._model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=latency_ms,
             cost_usd=0.0,
             success=success,
-            fallback_used=False,
+            fallback_used=fallback_used,
         )
         state.spans.append(span)

@@ -132,6 +132,13 @@ export class BlockTableComponent implements OnChanges {
     this.selectedIndexChange.emit(next);
   }
 
+  selectAt(index: number) {
+    const max = this.form.length - 1;
+    if (max < 0 || index < 0 || index > max) return;
+    this.selectedIndex.set(index);
+    this.selectedIndexChange.emit(index);
+  }
+
   toggleReviewedAt(i: number, event: Event) {
     event.stopPropagation();
     this.toggleReviewed.emit(i);

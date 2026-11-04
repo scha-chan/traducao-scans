@@ -30,6 +30,7 @@ from app.db.models import (  # noqa: E402
     Page,
     ProcessingRun,
     TextBlock,
+    TextBlockHistory,
     TranslationSuggestion,
     Work,
 )
@@ -47,6 +48,7 @@ _TABLES = [
     TranslationSuggestion.__table__,
     GlossaryEntry.__table__,
     GlossaryOccurrence.__table__,
+    TextBlockHistory.__table__,
 ]
 
 

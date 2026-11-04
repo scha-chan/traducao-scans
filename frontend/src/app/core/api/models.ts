@@ -26,6 +26,20 @@ export interface TextBlockExport extends ContractTextBlock {
 }
 
 export type PageStatus = 'PENDING' | 'PROCESSING' | 'REVIEW' | 'APPROVED' | 'ERROR';
+export type ReviewStatus = 'PENDING' | 'REVIEWED';
+
+export interface BlockOut {
+  id: string;
+  page_id: string;
+  order_number: number;
+  type: string | null;
+  original: string | null;
+  location: string | null;
+  source: string;
+  review_status: ReviewStatus;
+  created_at: string;
+  updated_at: string;
+}
 export type FolderStatus = 'PROCESSING' | 'DONE' | 'DONE_WITH_ERRORS' | 'INCOMPLETE';
 
 export interface FolderSummary {

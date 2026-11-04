@@ -92,6 +92,16 @@ class ProviderSpan:
 
 
 @dataclass
+class GlossaryHint:
+    """A glossary entry relevant to the current dialogue (V2-AG-01)."""
+
+    source_term: str
+    preferred_translation: str | None
+    category: str | None = None
+    notes: str | None = None
+
+
+@dataclass
 class DialogueState:
     """State for a single speech bubble / text region across pipeline stages."""
 
@@ -110,6 +120,7 @@ class DialogueState:
     needs_review: bool = False
     review_reason: str | None = None
     translations: list[TranslationCandidate] = field(default_factory=list)
+    glossary_hints: list[GlossaryHint] = field(default_factory=list)
 
 
 @dataclass
@@ -127,5 +138,7 @@ class PageAnalysisState:
     spans: list[ProviderSpan] = field(default_factory=list)
     agent_log: list[AgentLogEntry] = field(default_factory=list)
     prompt_version: str = "v1"
+    # V2-AG-01: all glossary entries for the work, pre-fetched by the orchestrator
+    work_glossary: list[GlossaryHint] = field(default_factory=list)
     characters: list[str] = field(default_factory=list)
     approved_translations: dict[str, str] = field(default_factory=dict)

@@ -9,10 +9,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.state import GlossaryHint
 from app.db.models import (
     Character,
     CharacterMention,
     Folder,
+    GlossaryEntry,
     Page,
     ReviewStatus,
     TextBlock,
@@ -58,6 +60,7 @@ class TranslationContext:
     next_block: NeighbourBlock | None
     characters: list[CharacterContext] = field(default_factory=list)
     prior_translations: list[PriorTranslation] = field(default_factory=list)
+    glossary_hints: list[GlossaryHint] = field(default_factory=list)
     output_language: Literal["pt-BR"] = "pt-BR"
 
 
@@ -75,6 +78,8 @@ class TranslationContextBuilder:
         characters = await self._characters(block, session)
         prior_translations = await self._prior_translations(block, page, session)
 
+        glossary_hints = await self._glossary_hints(block, page, session)
+
         return TranslationContext(
             original=block.original,
             block_type=block.type,
@@ -84,6 +89,7 @@ class TranslationContextBuilder:
             next_block=next_block,
             characters=characters,
             prior_translations=prior_translations,
+            glossary_hints=glossary_hints,
         )
 
     async def _neighbours(
@@ -191,4 +197,34 @@ class TranslationContextBuilder:
                 translation=row.translation,
             )
             for row in rows
+        ]
+
+    async def _glossary_hints(
+        self,
+        block: TextBlock,
+        page: Page,
+        session: AsyncSession,
+    ) -> list[GlossaryHint]:
+        """Return glossary entries whose source_term appears in the block's original (V2-AG-01)."""
+        if not block.original:
+            return []
+
+        work_id: UUID | None = (
+            await session.execute(select(Folder.work_id).where(Folder.id == page.folder_id))
+        ).scalar_one_or_none()
+        if work_id is None:
+            return []
+
+        stmt = select(GlossaryEntry).where(GlossaryEntry.work_id == work_id)
+        all_entries = (await session.execute(stmt)).scalars().all()
+
+        return [
+            GlossaryHint(
+                source_term=entry.source_term,
+                preferred_translation=entry.preferred_translation,
+                category=entry.category,
+                notes=entry.notes,
+            )
+            for entry in all_entries
+            if entry.source_term in block.original
         ]

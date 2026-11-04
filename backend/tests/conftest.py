@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -12,6 +13,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from PIL import Image  # noqa: E402
+from sqlalchemy import event  # noqa: E402
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,
     async_sessionmaker,
@@ -19,11 +21,34 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 
 from app.db import Base, get_db  # noqa: E402
-from app.db.models import Folder, Page, Work  # noqa: E402
+from app.db.models import (  # noqa: E402
+    Character,
+    CharacterMention,
+    Folder,
+    Page,
+    ProcessingRun,
+    TextBlock,
+    TranslationSuggestion,
+    Work,
+)
 from app.main import app  # noqa: E402
 from app.settings import settings  # noqa: E402
 
-_TABLES = [Work.__table__, Folder.__table__, Page.__table__]
+_TABLES = [
+    Work.__table__,
+    Folder.__table__,
+    Page.__table__,
+    Character.__table__,
+    CharacterMention.__table__,
+    ProcessingRun.__table__,
+    TextBlock.__table__,
+    TranslationSuggestion.__table__,
+]
+
+
+def _strip_sqlite_unsupported_ddl(ddl: str) -> str:
+    # SQLite does not support DEFERRABLE INITIALLY in CREATE TABLE DDL
+    return re.sub(r"\s+DEFERRABLE\s+INITIALLY\s+\w+", "", ddl, flags=re.IGNORECASE)
 
 
 @pytest.fixture
@@ -32,6 +57,18 @@ async def client(
 ) -> AsyncGenerator[AsyncClient, None]:
     db_url = f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
     engine = create_async_engine(db_url)
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute", retval=True)
+    def _fix_sqlite_ddl(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,  # noqa: ANN001
+    ) -> tuple[str, object]:
+        return _strip_sqlite_unsupported_ddl(statement), parameters
+
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with engine.begin() as conn:

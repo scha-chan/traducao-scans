@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.deps import get_db
-from app.db.models import BlockSource, TextBlock, TranslationSuggestion
+from app.db.models import BlockSource, Page, PageStatus, TextBlock, TranslationSuggestion
 
 router = APIRouter(prefix="/blocks", tags=["blocks"])
 
@@ -70,6 +70,13 @@ class SuggestionUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _maybe_reset_to_review(page_id: UUID, db: AsyncSession) -> None:
+    result = await db.execute(select(Page).where(Page.id == page_id))
+    page = result.scalar_one_or_none()
+    if page is not None and page.status == PageStatus.APPROVED:
+        page.status = PageStatus.REVIEW
 
 
 async def _get_block_or_404(block_id: UUID, db: AsyncSession) -> TextBlock:
@@ -150,6 +157,7 @@ async def update_block(
     if body.localizacao is not None:
         block.location = body.localizacao
     block.source = BlockSource.MANUAL
+    await _maybe_reset_to_review(block.page_id, db)
     await db.commit()
     await db.refresh(block)
     block = await _get_block_or_404(block_id, db)
@@ -189,6 +197,7 @@ async def create_suggestion(
         source=BlockSource.MANUAL,
     )
     db.add(suggestion)
+    await _maybe_reset_to_review(block.page_id, db)
     await db.commit()
     await db.refresh(suggestion)
     return SuggestionOut.model_validate(suggestion)
@@ -201,6 +210,7 @@ async def update_suggestion(
     body: SuggestionUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> SuggestionOut:
+    block = await _get_block_or_404(block_id, db)
     suggestion = await _get_suggestion_or_404(block_id, suggestion_id, db)
     if body.traducao is not None:
         suggestion.translation = body.traducao
@@ -209,6 +219,7 @@ async def update_suggestion(
     if body.relevancia is not None:
         suggestion.relevance = body.relevancia
     suggestion.source = BlockSource.MANUAL
+    await _maybe_reset_to_review(block.page_id, db)
     await db.commit()
     await db.refresh(suggestion)
     return SuggestionOut.model_validate(suggestion)
@@ -228,4 +239,5 @@ async def delete_suggestion(
         )
     suggestion = await _get_suggestion_or_404(block_id, suggestion_id, db)
     await db.delete(suggestion)
+    await _maybe_reset_to_review(block.page_id, db)
     await db.commit()

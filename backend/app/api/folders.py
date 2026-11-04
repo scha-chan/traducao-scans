@@ -1,5 +1,7 @@
+import asyncio
 import hashlib
 import io
+import logging
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -21,8 +23,10 @@ from app.api.pages import (
     _page_to_summary,
 )
 from app.db.deps import get_db
-from app.db.models import Folder, Page, ProcessingRun, RunType, TextBlock, Work
+from app.db.models import Folder, Page, PageStatus, ProcessingRun, RunType, TextBlock, Work
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -317,3 +321,107 @@ async def export_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> 
         )
 
     return FolderExportOut(pasta=folder.name, paginas=paginas)
+
+
+# ---------------------------------------------------------------------------
+# Batch processing (V2-BE-02)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BATCH_CONCURRENCY = 2
+
+
+class BatchProcessRequest(BaseModel):
+    page_ids: list[UUID] | None = Field(
+        default=None,
+        description="Pages to process. When null, processes all PENDING and ERROR pages.",
+    )
+    concurrency: int = Field(default=_DEFAULT_BATCH_CONCURRENCY, ge=1, le=8)
+
+
+class BatchPageResult(BaseModel):
+    page_id: UUID
+    page_number: int
+    success: bool
+    error: str | None = None
+
+
+class BatchProcessOut(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[BatchPageResult]
+
+
+@router.post("/{folder_id}/batch-process", response_model=BatchProcessOut, tags=["pages"])
+async def batch_process_folder(
+    folder_id: UUID,
+    body: BatchProcessRequest,
+    db: AsyncSession = Depends(get_db),
+) -> BatchProcessOut:
+    """Process multiple pages of a folder concurrently (V2-BE-02).
+
+    If *page_ids* is omitted, all pages with status PENDING or ERROR are
+    selected.  Skips pages that are currently PROCESSING.  At most
+    *concurrency* pages run in parallel (default 2).
+    """
+    await _get_or_404(folder_id, db)
+
+    if body.page_ids is not None:
+        result = await db.execute(
+            select(Page).where(
+                Page.folder_id == folder_id,
+                Page.id.in_(body.page_ids),
+            )
+        )
+        pages = list(result.scalars().all())
+    else:
+        result = await db.execute(
+            select(Page)
+            .where(
+                Page.folder_id == folder_id,
+                Page.status.in_([PageStatus.PENDING, PageStatus.ERROR]),
+            )
+            .order_by(Page.page_number)
+        )
+        pages = list(result.scalars().all())
+
+    if not pages:
+        return BatchProcessOut(total=0, succeeded=0, failed=0, results=[])
+
+    # Skip pages already being processed to avoid conflicts
+    eligible = [p for p in pages if p.status != PageStatus.PROCESSING]
+
+    sem = asyncio.Semaphore(body.concurrency)
+    pool = await queue.get_pool()
+
+    async def _process_one(page: Page) -> BatchPageResult:
+        async with sem:
+            try:
+                run = ProcessingRun(page_id=page.id, run_type=RunType.FULL)
+                await _dispatch_and_wait(pool, db, page, run)
+                return BatchPageResult(page_id=page.id, page_number=page.page_number, success=True)
+            except Exception as exc:
+                logger.warning(
+                    "batch_process failed page_id=%s page_number=%d: %s",
+                    page.id,
+                    page.page_number,
+                    exc,
+                )
+                return BatchPageResult(
+                    page_id=page.id,
+                    page_number=page.page_number,
+                    success=False,
+                    error=str(exc),
+                )
+
+    results = await asyncio.gather(*[_process_one(p) for p in eligible])
+    batch_results = list(results)
+    succeeded = sum(1 for r in batch_results if r.success)
+    failed = sum(1 for r in batch_results if not r.success)
+
+    return BatchProcessOut(
+        total=len(batch_results),
+        succeeded=succeeded,
+        failed=failed,
+        results=batch_results,
+    )

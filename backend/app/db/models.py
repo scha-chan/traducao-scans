@@ -55,6 +55,12 @@ class BlockSource(StrEnum):
     MANUAL = "MANUAL"
 
 
+class ChangeType(StrEnum):
+    EDITED = "EDITED"
+    REVIEWED = "REVIEWED"
+    UNREVIEW = "UNREVIEW"
+
+
 class Orientation(StrEnum):
     VERTICAL = "VERTICAL"
     HORIZONTAL = "HORIZONTAL"
@@ -77,6 +83,7 @@ class Work(Base):
 
     folders: Mapped[list["Folder"]] = relationship(back_populates="work")
     characters: Mapped[list["Character"]] = relationship(back_populates="work")
+    glossary_entries: Mapped[list["GlossaryEntry"]] = relationship(back_populates="work")
 
 
 class Folder(Base):
@@ -84,8 +91,8 @@ class Folder(Base):
     __table_args__ = (UniqueConstraint("name", name="uq_folders_name"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    work_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("works.id", ondelete="SET NULL"), nullable=True
+    work_id: Mapped[UUID] = mapped_column(
+        ForeignKey("works.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -98,7 +105,7 @@ class Folder(Base):
         nullable=False,
     )
 
-    work: Mapped["Work | None"] = relationship(back_populates="folders")
+    work: Mapped["Work"] = relationship(back_populates="folders")
     pages: Mapped[list["Page"]] = relationship(
         back_populates="folder", cascade="all, delete-orphan"
     )
@@ -302,3 +309,85 @@ class TranslationSuggestion(Base):
     )
 
     text_block: Mapped["TextBlock"] = relationship(back_populates="translation_suggestions")
+
+
+class GlossaryEntry(Base):
+    """Term in the work glossary (V2-DB-01)."""
+
+    __tablename__ = "glossary_entries"
+    __table_args__ = (
+        UniqueConstraint("work_id", "source_term", name="uq_glossary_entries_work_term"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    work_id: Mapped[UUID] = mapped_column(
+        ForeignKey("works.id", ondelete="CASCADE"), nullable=False
+    )
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_term: Mapped[str] = mapped_column(Text, nullable=False)
+    preferred_translation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    work: Mapped["Work"] = relationship(back_populates="glossary_entries")
+    occurrences: Mapped[list["GlossaryOccurrence"]] = relationship(
+        back_populates="entry", cascade="all, delete-orphan"
+    )
+
+
+class GlossaryOccurrence(Base):
+    """Where a glossary term was spotted in the manga (V2-DB-01)."""
+
+    __tablename__ = "glossary_occurrences"
+    __table_args__ = (
+        UniqueConstraint(
+            "glossary_entry_id", "text_block_id", name="uq_glossary_occurrences_entry_block"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    glossary_entry_id: Mapped[UUID] = mapped_column(
+        ForeignKey("glossary_entries.id", ondelete="CASCADE"), nullable=False
+    )
+    page_id: Mapped[UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=False
+    )
+    text_block_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("text_blocks.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    entry: Mapped["GlossaryEntry"] = relationship(back_populates="occurrences")
+    page: Mapped["Page"] = relationship()
+    text_block: Mapped["TextBlock | None"] = relationship()
+
+
+class TextBlockHistory(Base):
+    """Append-only log of changes to a text block (V2-BE-03)."""
+
+    __tablename__ = "text_block_history"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    block_id: Mapped[UUID] = mapped_column(
+        ForeignKey("text_blocks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    change_type: Mapped[ChangeType] = mapped_column(
+        Enum(ChangeType, name="change_type"), nullable=False
+    )
+    original: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus, name="review_status"), nullable=False
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    block: Mapped["TextBlock"] = relationship()

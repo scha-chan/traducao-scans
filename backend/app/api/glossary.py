@@ -1,7 +1,5 @@
 """V2-BE-01/AG-02: CRUD do glossário, busca de ocorrências e sugestão automática."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from uuid import UUID
 

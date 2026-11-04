@@ -73,6 +73,7 @@ def build_pipeline() -> Orchestrator:
     from agent.stages.location import LocationStage  # noqa: PLC0415
     from agent.stages.merge_blocks import MergeBlocksStage  # noqa: PLC0415
     from agent.stages.ocr import OcrStage  # noqa: PLC0415
+    from agent.stages.ocr_reprocess import OcrReprocessStage  # noqa: PLC0415
     from agent.stages.preprocess import PreprocessStage  # noqa: PLC0415
     from agent.stages.reading_order import ReadingOrderStage  # noqa: PLC0415
     from agent.stages.translation import TranslationStage  # noqa: PLC0415
@@ -80,13 +81,14 @@ def build_pipeline() -> Orchestrator:
     detection = DetectionStage(
         provider=ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
     )
-    ocr = OcrStage(
-        provider=MangaOcrProvider(pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL"))
+    shared_ocr_provider = MangaOcrProvider(
+        pretrained_model_name_or_path=os.environ.get("MANGA_OCR_MODEL")
     )
+    ocr = OcrStage(provider=shared_ocr_provider)
     merge = MergeBlocksStage()
-    confidence = LowConfidenceStage(
-        threshold=float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
-    )
+    ocr_threshold = float(os.environ.get("OCR_LOW_CONFIDENCE_THRESHOLD", "0.80"))
+    confidence = LowConfidenceStage(threshold=ocr_threshold)
+    ocr_reprocess = OcrReprocessStage(provider=shared_ocr_provider, threshold=ocr_threshold)
     translation_cache = TranslationCache()
     llm_translation_provider = ClaudeTranslationProvider(
         cache=translation_cache,
@@ -105,6 +107,7 @@ def build_pipeline() -> Orchestrator:
             ocr,
             merge,
             confidence,
+            ocr_reprocess,
             handwritten,
             divisa,
             reading_order,

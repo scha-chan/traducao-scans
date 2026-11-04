@@ -1,7 +1,5 @@
 """V2-BE-01: CRUD do glossário e busca de ocorrências por termo."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from uuid import UUID
 

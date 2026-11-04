@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import queue
+from app.api.blocks import BlockOut, _to_block_out
 from app.db.deps import get_db
 from app.db.models import (
     BlockSource,
@@ -186,6 +187,18 @@ async def _get_or_404(page_id: UUID, db: AsyncSession) -> Page:
 @router.get("/{page_id}", response_model=PageOut)
 async def get_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Page:
     return await _get_or_404(page_id, db)
+
+
+@router.get("/{page_id}/blocks", response_model=list[BlockOut])
+async def list_blocks(page_id: UUID, db: AsyncSession = Depends(get_db)) -> list[BlockOut]:
+    await _get_or_404(page_id, db)
+    result = await db.execute(
+        select(TextBlock)
+        .where(TextBlock.page_id == page_id)
+        .options(selectinload(TextBlock.translation_suggestions))
+        .order_by(TextBlock.order_number)
+    )
+    return [_to_block_out(b) for b in result.scalars().all()]
 
 
 @router.get("/{page_id}/runs", response_model=list[RunOut])
@@ -485,6 +498,8 @@ async def save_page_json(
                 )
             )
 
+    if page.status == PageStatus.APPROVED:
+        page.status = PageStatus.REVIEW
     await db.commit()
     return JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -589,7 +604,7 @@ async def reorder_blocks(
     body: BlockOrderIn,
     db: AsyncSession = Depends(get_db),
 ) -> list[TextBlockExport]:
-    await _get_or_404(page_id, db)
+    page = await _get_or_404(page_id, db)
 
     result = await db.execute(
         select(TextBlock)
@@ -612,6 +627,8 @@ async def reorder_blocks(
 
     for i, block_id in enumerate(body.block_ids):
         blocks_by_id[block_id].order_number = i + 1
+    if page.status == PageStatus.APPROVED:
+        page.status = PageStatus.REVIEW
     await db.commit()
 
     ordered = [blocks_by_id[bid] for bid in body.block_ids]

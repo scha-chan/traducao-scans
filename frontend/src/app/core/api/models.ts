@@ -149,3 +149,13 @@ export interface RegenerateResponse {
   blocos: TextBlockExport[];
   cost_usd?: number;
 }
+
+export interface ApproveResponse {
+  page: PageSummary;
+}
+
+export interface JsonValidationError {
+  blockIndex: number;
+  field: string;
+  message: string;
+}

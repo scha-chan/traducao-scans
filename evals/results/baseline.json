@@ -1,0 +1,17 @@
+{
+  "prompt_version": "v1",
+  "judge_model": "claude-haiku-5-5",
+  "translate_model": "claude-haiku-5-5",
+  "dry_run": true,
+  "timestamp": "2026-11-04T00:00:00+00:00",
+  "total_blocks": 0,
+  "aggregate_avg": 4.0,
+  "dimension_avgs": {
+    "fidelidade": 4.0,
+    "naturalidade": 4.0,
+    "manga": 4.0,
+    "terminologia": 4.0
+  },
+  "note": "Initial baseline — replace by running: python evals/run_prompt_eval.py --save-baseline",
+  "blocks": []
+}

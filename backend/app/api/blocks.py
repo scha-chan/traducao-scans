@@ -10,10 +10,12 @@ from sqlalchemy.orm import selectinload
 from app.db.deps import get_db
 from app.db.models import (
     BlockSource,
+    ChangeType,
     Page,
     PageStatus,
     ReviewStatus,
     TextBlock,
+    TextBlockHistory,
     TranslationSuggestion,
 )
 
@@ -157,6 +159,7 @@ async def update_block(
     block_id: UUID, body: BlockUpdate, db: AsyncSession = Depends(get_db)
 ) -> BlockOut:
     block = await _get_block_or_404(block_id, db)
+    old_original = block.original
     if body.tipo is not None:
         block.type = body.tipo
     if body.original is not None:
@@ -165,6 +168,7 @@ async def update_block(
         block.location = body.localizacao
     block.source = BlockSource.MANUAL
     await _maybe_reset_to_review(block.page_id, db)
+    await _record_history(block, ChangeType.EDITED, db, original_snapshot=old_original)
     await db.commit()
     await db.refresh(block)
     block = await _get_block_or_404(block_id, db)
@@ -237,8 +241,11 @@ async def toggle_reviewed(block_id: UUID, db: AsyncSession = Depends(get_db)) ->
     block = await _get_block_or_404(block_id, db)
     if block.review_status == ReviewStatus.REVIEWED:
         block.review_status = ReviewStatus.PENDING
+        change = ChangeType.UNREVIEW
     else:
         block.review_status = ReviewStatus.REVIEWED
+        change = ChangeType.REVIEWED
+    await _record_history(block, change, db)
     await db.commit()
     block = await _get_block_or_404(block_id, db)
     return _to_block_out(block)
@@ -260,3 +267,51 @@ async def delete_suggestion(
     await db.delete(suggestion)
     await _maybe_reset_to_review(block.page_id, db)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Block history (V2-BE-03)
+# ---------------------------------------------------------------------------
+
+
+class HistoryEntryOut(BaseModel):
+    id: UUID
+    block_id: UUID
+    changed_at: datetime
+    change_type: str
+    original: str | None
+    review_status: str
+    notes: str | None
+
+    model_config = {"from_attributes": True}
+
+
+async def _record_history(
+    block: TextBlock,
+    change_type: ChangeType,
+    db: AsyncSession,
+    notes: str | None = None,
+    original_snapshot: str | None = None,
+) -> None:
+    entry = TextBlockHistory(
+        block_id=block.id,
+        change_type=change_type,
+        original=original_snapshot if original_snapshot is not None else block.original,
+        review_status=block.review_status,
+        notes=notes,
+    )
+    db.add(entry)
+
+
+@router.get("/{block_id}/history", response_model=list[HistoryEntryOut])
+async def get_block_history(
+    block_id: UUID, db: AsyncSession = Depends(get_db)
+) -> list[TextBlockHistory]:
+    """Return the change history for *block_id*, newest first (V2-BE-03)."""
+    await _get_block_or_404(block_id, db)
+    result = await db.execute(
+        select(TextBlockHistory)
+        .where(TextBlockHistory.block_id == block_id)
+        .order_by(TextBlockHistory.changed_at.desc())
+    )
+    return list(result.scalars().all())

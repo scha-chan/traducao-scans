@@ -119,6 +119,17 @@ class ClaudeTranslationProvider:
             "location": dialogue.location,
             "ocr_confidence": dialogue.ocr_confidence,
         }
+        # V2-AG-01: include glossary hints when available
+        if dialogue.glossary_hints:
+            payload["glossary"] = [
+                {
+                    "source_term": h.source_term,
+                    "preferred_translation": h.preferred_translation,
+                    "category": h.category,
+                    "notes": h.notes,
+                }
+                for h in dialogue.glossary_hints
+            ]
         return json.dumps(payload, ensure_ascii=False)
 
     def _parse_response(self, text: str) -> LLMTranslationResponse:

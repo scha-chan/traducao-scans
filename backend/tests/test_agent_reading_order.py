@@ -8,6 +8,7 @@ import pytest
 
 from agent.stages.reading_order import (
     ColumnRtlStrategy,
+    PanelAwareStrategy,
     ReadingOrderStage,
     TieredColumnRtlStrategy,
     _group_into_columns,
@@ -276,6 +277,116 @@ def test_tiebreak_centre_x_desc_within_column() -> None:
     strategy = ColumnRtlStrategy()
     ordered = strategy.order([b, a], 750, 1200, [])
     assert [d.id for d in ordered] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Strategy: panel_aware (V2-AG-03)
+# ---------------------------------------------------------------------------
+
+
+def _make_panel(x: int, y: int, width: int, height: int) -> PanelRegion:
+    return PanelRegion(bbox=BBox(x=x, y=y, width=width, height=height))
+
+
+def test_panel_aware_two_panels_rtl_order() -> None:
+    """Two side-by-side panels on the same row → right panel read first."""
+    # Right panel: x=400..750
+    right_d = _make_dialogue(x=500, y=100, width=100, height=50, did="right_d")
+    # Left panel: x=0..350
+    left_d = _make_dialogue(x=100, y=100, width=100, height=50, did="left_d")
+
+    right_panel = _make_panel(x=400, y=0, width=350, height=600)
+    left_panel = _make_panel(x=0, y=0, width=350, height=600)
+
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([left_d, right_d], 750, 1200, [], panels=[right_panel, left_panel])
+    assert [d.id for d in ordered] == ["right_d", "left_d"]
+
+
+def test_panel_aware_two_rows_top_before_bottom() -> None:
+    """Two vertically stacked panels → top panel read first."""
+    top_d = _make_dialogue(x=100, y=100, width=100, height=50, did="top_d")
+    bottom_d = _make_dialogue(x=100, y=700, width=100, height=50, did="bottom_d")
+
+    top_panel = _make_panel(x=0, y=0, width=750, height=500)
+    bottom_panel = _make_panel(x=0, y=600, width=750, height=600)
+
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([bottom_d, top_d], 750, 1200, [], panels=[top_panel, bottom_panel])
+    assert [d.id for d in ordered] == ["top_d", "bottom_d"]
+
+
+def test_panel_aware_four_panels_manga_order() -> None:
+    """2×2 grid: top-right → top-left → bottom-right → bottom-left."""
+    # Top row: y=0..500; bottom row: y=600..1200
+    # Right col: x=400..750; left col: x=0..350
+    tr_d = _make_dialogue(x=500, y=200, width=80, height=60, did="tr")
+    tl_d = _make_dialogue(x=100, y=200, width=80, height=60, did="tl")
+    br_d = _make_dialogue(x=500, y=800, width=80, height=60, did="br")
+    bl_d = _make_dialogue(x=100, y=800, width=80, height=60, did="bl")
+
+    panels = [
+        _make_panel(x=400, y=0, width=350, height=500),  # top-right
+        _make_panel(x=0, y=0, width=350, height=500),  # top-left
+        _make_panel(x=400, y=600, width=350, height=600),  # bottom-right
+        _make_panel(x=0, y=600, width=350, height=600),  # bottom-left
+    ]
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([bl_d, br_d, tl_d, tr_d], 750, 1200, [], panels=panels)
+    assert [d.id for d in ordered] == ["tr", "tl", "br", "bl"]
+
+
+def test_panel_aware_unassigned_fallback_appended_last() -> None:
+    """Dialogue outside all panels is appended after all panel dialogues."""
+    inside_d = _make_dialogue(x=100, y=100, width=80, height=50, did="inside")
+    outside_d = _make_dialogue(x=680, y=1100, width=50, height=50, did="outside")
+
+    panel = _make_panel(x=0, y=0, width=750, height=500)
+
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([outside_d, inside_d], 750, 1200, [], panels=[panel])
+    assert ordered[0].id == "inside"
+    assert ordered[1].id == "outside"
+    assert ordered[0].order == 1
+    assert ordered[1].order == 2
+
+
+def test_panel_aware_no_panels_falls_back_to_tiered() -> None:
+    """With no panels, panel_aware degrades to tiered_column_rtl."""
+    right = _make_dialogue(x=600, y=100, width=80, height=50, did="right")
+    left = _make_dialogue(x=100, y=100, width=80, height=50, did="left")
+
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([left, right], 750, 1200, [], panels=[])
+    assert [d.id for d in ordered] == ["right", "left"]
+
+
+def test_panel_aware_column_rtl_within_panel() -> None:
+    """Within a single panel, dialogues obey column_rtl (right column first)."""
+    panel = _make_panel(x=0, y=0, width=750, height=600)
+
+    right_d = _make_dialogue(x=580, y=100, width=80, height=100, did="right_d")
+    left_d = _make_dialogue(x=100, y=100, width=80, height=100, did="left_d")
+
+    strategy = PanelAwareStrategy()
+    ordered = strategy.order([left_d, right_d], 750, 1200, [], panels=[panel])
+    assert [d.id for d in ordered] == ["right_d", "left_d"]
+
+
+@pytest.mark.asyncio
+async def test_stage_panel_aware_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ReadingOrderStage selects PanelAwareStrategy when env var is set."""
+    monkeypatch.setenv("READING_ORDER_STRATEGY", "panel_aware")
+    import importlib
+
+    import agent.stages.reading_order as ro_mod
+
+    importlib.reload(ro_mod)
+
+    stage = ro_mod.ReadingOrderStage()
+    assert isinstance(stage._strategy, ro_mod.PanelAwareStrategy)
+    # Clean up
+    importlib.reload(ro_mod)
 
 
 def test_tiebreak_centre_y_asc_within_column() -> None:

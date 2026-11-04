@@ -1,0 +1,17 @@
+pagina,arquivo,bloco_ordem,original_ja,traducao_pt,fidelidade_1_5,naturalidade_1_5,utilidade_obs_1_5,obs_avaliador
+1,pagina_01.webp,1,このノートは,Este caderno é,5,5,4,Tradução correta; observação indica manuscrito
+1,pagina_01.webp,2,わたしの,meu,5,5,3,Termo simples; observação vazia
+1,pagina_01.webp,3,ひみつのきろく,diário secreto,5,5,4,Escolha natural para 'registro secreto'
+1,pagina_01.webp,4,だから,por isso,5,5,3,Conjunção simples; observação dispensável
+1,pagina_01.webp,5,みせないで,não mostre,4,5,4,Imperativo adequado ao registro infantil
+1,pagina_01.webp,6,ね！,tá bem!,4,5,5,Partícula de confirmação bem adaptada ao PT-BR
+1,pagina_01.webp,7,ゆいか,Yuika,5,5,2,Nome próprio transliterado; obs. sem contexto extra
+1,pagina_01.webp,8,さくら,Sakura,5,5,2,Nome próprio; obs. sem contexto
+1,pagina_01.webp,9,みく,Miku,5,5,2,Nome próprio
+1,pagina_01.webp,10,りん,Rin,5,5,2,Nome próprio
+1,pagina_01.webp,11,なまえ,nome,5,5,3,Legenda simples
+1,pagina_01.webp,12,へんてこな えがたち,desenhos esquisitos,5,4,4,Coloquial bem escolhido; leve diferença de registro
+2,banner_01.png,1,記念号,Edição comemorativa,5,5,5,Contexto editorial bem explicado na observação
+2,banner_01.png,2,ゆるふわ日和,Dias Relaxantes,4,5,4,Adaptação de título preserva o tom fofo
+2,banner_01.png,3,つづく…,Continua…,5,5,3,Padrão; obs. sem valor acrescentado
+2,banner_01.png,4,あの子の秘密,O segredo daquela garota,5,5,4,Pronome adaptado corretamente ao PT-BR

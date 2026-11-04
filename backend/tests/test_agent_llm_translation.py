@@ -176,3 +176,31 @@ def test_single_candidate_for_simple_text(tmp_path: Any) -> None:  # noqa: ANN40
 
     assert len(result) == 1
     assert result[0].translation == "Boom!"
+
+
+def test_prompt_version_fallback(tmp_path: Any) -> None:  # noqa: ANN401
+    """When state.prompt_version names a non-existent file, v1 is used as fallback."""
+    prompts_dir = tmp_path / "prompts"
+    prompts_dir.mkdir()
+    (prompts_dir / "translate_page.v1.txt").write_text("v1 prompt", encoding="utf-8")
+    # v99 does not exist — provider must fall back to v1
+
+    with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+        provider = ClaudeTranslationProvider(prompts_dir=str(prompts_dir))
+
+    state = _state()
+    state.prompt_version = "v99"
+
+    response = _make_response([{"traducao": "Fallback!", "observacao": "", "relevancia": 1}])
+
+    with patch("anthropic.Anthropic") as mock_anthropic:
+        mock_client = mock_anthropic.return_value
+        mock_client.messages.create.return_value = response
+        result = provider.translate_dialogue(_dialogue(), "v1", state)
+
+    assert len(result) == 1
+    assert result[0].translation == "Fallback!"
+    # Verify the v1 prompt text was used (not a FileNotFoundError)
+    call_kwargs = mock_client.messages.create.call_args
+    assert call_kwargs is not None
+    assert "v1 prompt" in call_kwargs.kwargs.get("system", "") or "v1 prompt" in str(call_kwargs)

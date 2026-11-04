@@ -88,7 +88,12 @@ async def _make_work(session: AsyncSession, title: str = "Test Work") -> Work:
 
 
 async def _make_folder(session: AsyncSession, work: Work | None = None) -> Folder:
-    folder = Folder(id=uuid4(), name=f"folder-{uuid4()}", work_id=work.id if work else None)
+    # V2: work_id is required; auto-create a default work when not provided
+    if work is None:
+        work = Work(title="Sem Título")
+        session.add(work)
+        await session.flush()
+    folder = Folder(id=uuid4(), name=f"folder-{uuid4()}", work_id=work.id)
     session.add(folder)
     await session.flush()
     return folder

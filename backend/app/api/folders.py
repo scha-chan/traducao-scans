@@ -80,7 +80,14 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
         work = await db.get(Work, body.work_id)
         if work is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Obra não encontrada")
-    folder = Folder(name=body.title, work_id=body.work_id)
+        work_id = body.work_id
+    else:
+        # V2: work_id is required at DB level; auto-create a default work for backwards compat
+        default_work = Work(title="Sem Título")
+        db.add(default_work)
+        await db.flush()
+        work_id = default_work.id
+    folder = Folder(name=body.title, work_id=work_id)
     db.add(folder)
     try:
         await db.commit()

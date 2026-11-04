@@ -55,6 +55,12 @@ class BlockSource(StrEnum):
     MANUAL = "MANUAL"
 
 
+class ChangeType(StrEnum):
+    EDITED = "EDITED"
+    REVIEWED = "REVIEWED"
+    UNREVIEW = "UNREVIEW"
+
+
 class Orientation(StrEnum):
     VERTICAL = "VERTICAL"
     HORIZONTAL = "HORIZONTAL"
@@ -361,3 +367,27 @@ class GlossaryOccurrence(Base):
     entry: Mapped["GlossaryEntry"] = relationship(back_populates="occurrences")
     page: Mapped["Page"] = relationship()
     text_block: Mapped["TextBlock | None"] = relationship()
+
+
+class TextBlockHistory(Base):
+    """Append-only log of changes to a text block (V2-BE-03)."""
+
+    __tablename__ = "text_block_history"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    block_id: Mapped[UUID] = mapped_column(
+        ForeignKey("text_blocks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    change_type: Mapped[ChangeType] = mapped_column(
+        Enum(ChangeType, name="change_type"), nullable=False
+    )
+    original: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        Enum(ReviewStatus, name="review_status"), nullable=False
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    block: Mapped["TextBlock"] = relationship()

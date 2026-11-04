@@ -1,4 +1,4 @@
-"""V2-BE-01: CRUD do glossário e busca de ocorrências por termo."""
+"""V2-BE-01/AG-02: CRUD do glossário, busca de ocorrências e sugestão automática."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from agent.glossary_suggester import GlossarySuggester
 from app.db.deps import get_db
 from app.db.models import GlossaryEntry, GlossaryOccurrence, Work
 
@@ -210,6 +211,50 @@ async def list_entry_occurrences(
 # Route — search occurrences by term across a work
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Route — auto-suggest new glossary entries (V2-AG-02)
+# ---------------------------------------------------------------------------
+
+
+class GlossarySuggestionOut(BaseModel):
+    source_term: str
+    page_count: int
+    category: str
+    sample_context: str
+
+
+@works_router.get("/suggest", response_model=list[GlossarySuggestionOut])
+async def suggest_glossary_entries(
+    work_id: UUID,
+    min_occurrences: int = 2,
+    db: AsyncSession = Depends(get_db),
+) -> list[GlossarySuggestionOut]:
+    """Scan reviewed blocks of the work and suggest new glossary entries.
+
+    Returns candidate terms (katakana, honorifics, kanji sequences) that appear
+    in at least *min_occurrences* distinct pages and are not yet in the glossary.
+    """
+    work = await db.get(Work, work_id)
+    if work is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Obra não encontrada")
+
+    suggester = GlossarySuggester(db, min_occurrences=min_occurrences)
+    suggestions = await suggester.suggest(work_id)
+    return [
+        GlossarySuggestionOut(
+            source_term=s.source_term,
+            page_count=s.page_count,
+            category=s.category,
+            sample_context=s.sample_context,
+        )
+        for s in suggestions
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Route — search occurrences by term across a work
+# ---------------------------------------------------------------------------
 
 glossary_search_router = APIRouter(tags=["glossary"])
 

@@ -19,22 +19,26 @@ import { BboxPx, FolderDetail, PageExport, PageSummary, TextBlockExport } from '
 import { PagesApi } from '../../core/api/pages.api';
 import { buildPageLines } from '../../export/txt-export';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
+import { UiKbdLegendComponent, KbdShortcut } from '../../shared/ui';
 import { PageImageViewerComponent } from './page-image-viewer.component';
 import { BlockSaveState, BlockTableComponent } from './block-table.component';
 import { ToastService } from '../../shared/ui/ui-toast/toast.service';
+import { validatePageJson, formatJson, downloadJson } from '../../export/json-export';
+import { JsonValidationError } from '../../core/api/models';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
+const TABS: { id: 'edit' | 'order' | 'preview' | 'export'; label: string }[] = [
   { id: 'edit', label: 'Editar' },
   { id: 'order', label: 'Ordenação' },
   { id: 'preview', label: 'Pré-visualizar texto' },
+  { id: 'export', label: 'Exportar JSON' },
 ];
 
 @Component({
   selector: 'app-page-review-modal',
   standalone: true,
-  imports: [UiButtonComponent, PageImageViewerComponent, BlockTableComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder],
+  imports: [UiButtonComponent, UiKbdLegendComponent, PageImageViewerComponent, BlockTableComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder],
   template: `
     <!-- Overlay -->
     <div
@@ -304,6 +308,76 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
                 <pre class="text-xs font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">{{ previewLines().join('\n') }}</pre>
               }
             </div>
+
+            <!-- Export tab -->
+            <div
+              [id]="'tab-export-' + page().id"
+              role="tabpanel"
+              class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3"
+              [class.hidden]="activeTab() !== 'export'"
+            >
+              <!-- Validation errors -->
+              @if (exportValidationErrors().length > 0) {
+                <div class="rounded-lg border border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950 p-3">
+                  <p class="text-xs font-semibold text-red-700 dark:text-red-400 mb-2">
+                    ⚠ {{ exportValidationErrors().length }} erro(s) de validação — corrija antes de exportar
+                  </p>
+                  <ul class="text-xs text-red-600 dark:text-red-400 space-y-1 list-disc list-inside">
+                    @for (err of exportValidationErrors(); track err.field + err.blockIndex) {
+                      <li>
+                        @if (err.blockIndex >= 0) {
+                          <button
+                            class="underline hover:text-red-800 dark:hover:text-red-200 font-medium"
+                            (click)="jumpToExportError(err)"
+                            [attr.aria-label]="'Ir para bloco ' + (err.blockIndex + 1)"
+                          >Bloco {{ err.blockIndex + 1 }}</button> —
+                        }
+                        {{ err.message }}
+                      </li>
+                    }
+                  </ul>
+                </div>
+              } @else {
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                  ✓ JSON válido — pronto para exportar
+                </div>
+              }
+
+              <!-- Action buttons -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <ui-button
+                  variant="secondary"
+                  [disabled]="exportValidationErrors().length > 0"
+                  (click)="onCopyJson()"
+                  aria-label="Copiar JSON para a área de transferência"
+                >
+                  {{ jsonCopied() ? '✓ Copiado!' : '⎘ Copiar JSON' }}
+                </ui-button>
+                <ui-button
+                  variant="primary"
+                  [disabled]="exportValidationErrors().length > 0"
+                  (click)="onDownloadJson()"
+                  aria-label="Baixar arquivo JSON"
+                >
+                  ↓ Baixar JSON
+                </ui-button>
+                <ui-button
+                  variant="secondary"
+                  [loading]="approving()"
+                  [disabled]="approving() || exportValidationErrors().length > 0 || page().status === 'APPROVED'"
+                  (click)="onApprovePage()"
+                  aria-label="Aprovar página"
+                >
+                  {{ page().status === 'APPROVED' ? '✓ Aprovada' : 'Aprovar página' }}
+                </ui-button>
+              </div>
+
+              <!-- JSON preview -->
+              <pre
+                class="flex-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 p-3 text-xs font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre overflow-auto"
+                aria-label="Pré-visualização do JSON"
+              >{{ exportJson() }}</pre>
+            </div>
           </div>
         </div>
 
@@ -320,9 +394,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
 
         <!-- Footer -->
         <div class="h-16 flex items-center justify-between px-4 border-t border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-          <span class="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:block">
-            J/K: navegar · T: tipo · R: revisado · F: filtro · ←/→: página
-          </span>
+          <ui-kbd-legend [shortcuts]="kbdShortcuts" class="hidden sm:inline-flex" />
           <div class="flex items-center gap-2">
             <ui-button variant="secondary" [disabled]="reprocessing()" (click)="close()">Cancelar</ui-button>
             <ui-button
@@ -409,6 +481,14 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
 
   readonly tabs = TABS;
 
+  readonly kbdShortcuts: KbdShortcut[] = [
+    { keys: ['J', 'K'], label: 'navegar' },
+    { keys: ['T'], label: 'tipo' },
+    { keys: ['R'], label: 'revisado' },
+    { keys: ['F'], label: 'filtro' },
+    { keys: ['←', '→'], label: 'página' },
+  ];
+
   readonly folder = input.required<FolderDetail>();
   readonly page = input.required<PageSummary>();
 
@@ -448,8 +528,15 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
   readonly unsavedDialogOpen = signal(false);
   private pendingAction = signal<(() => void) | null>(null);
 
-  readonly activeTab = signal<'edit' | 'order' | 'preview'>('edit');
+  readonly activeTab = signal<'edit' | 'order' | 'preview' | 'export'>('edit');
   readonly previewLines = signal<string[]>([]);
+
+  readonly exportJson = signal('');
+  readonly exportValidationErrors = signal<JsonValidationError[]>([]);
+  readonly approving = signal(false);
+  readonly jsonCopied = signal(false);
+  private approveSub?: import('rxjs').Subscription;
+  private jsonCopiedTimeout?: ReturnType<typeof setTimeout>;
   readonly reordering = signal(false);
   readonly orderFocusedIndex = signal<number | null>(null);
 
@@ -495,9 +582,11 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     this.autoSaveApiSub?.unsubscribe();
     this.reprocessSub?.unsubscribe();
     this.regenerateSub?.unsubscribe();
+    this.approveSub?.unsubscribe();
     clearTimeout(this.smallRectTimeout);
     clearTimeout(this.saveErrorTimeout);
     clearTimeout(this.savedTimeout);
+    clearTimeout(this.jsonCopiedTimeout);
     (this.previousActiveElement as HTMLElement | null)?.focus();
   }
 
@@ -676,11 +765,59 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     });
   }
 
-  setTab(tab: 'edit' | 'order' | 'preview') {
+  setTab(tab: 'edit' | 'order' | 'preview' | 'export') {
     this.activeTab.set(tab);
     if (tab === 'preview') {
       this.refreshPreview();
     }
+    if (tab === 'export') {
+      this.refreshExport();
+    }
+  }
+
+  private refreshExport() {
+    const blocks = this.blocks();
+    const json = formatJson(blocks);
+    this.exportJson.set(json);
+    this.exportValidationErrors.set(validatePageJson(blocks));
+  }
+
+  jumpToExportError(err: JsonValidationError) {
+    if (err.blockIndex >= 0) {
+      this.setTab('edit');
+      setTimeout(() => this.blockTable?.selectAt(err.blockIndex), 50);
+    }
+  }
+
+  onCopyJson() {
+    navigator.clipboard.writeText(this.exportJson()).then(() => {
+      this.jsonCopied.set(true);
+      clearTimeout(this.jsonCopiedTimeout);
+      this.jsonCopiedTimeout = setTimeout(() => this.jsonCopied.set(false), 2000);
+    });
+  }
+
+  onDownloadJson() {
+    const fileName = `pagina_${this.page().page_number}_${this.page().file_name.replace(/\.[^.]+$/, '')}.json`;
+    downloadJson(this.exportJson(), fileName);
+  }
+
+  onApprovePage() {
+    if (this.approving()) return;
+    this.approving.set(true);
+    this.approveSub?.unsubscribe();
+    this.approveSub = this.pagesApi.approve(this.page().id).subscribe({
+      next: (result) => {
+        this.approving.set(false);
+        this.pageReprocessed.emit(result.page);
+        this.toast.show('Página aprovada com sucesso!', 'success');
+      },
+      error: (err) => {
+        this.approving.set(false);
+        const msg = err?.error?.detail ?? 'Erro ao aprovar a página.';
+        this.toast.show(msg, 'error');
+      },
+    });
   }
 
   onOrderDrop(event: CdkDragDrop<unknown>) {

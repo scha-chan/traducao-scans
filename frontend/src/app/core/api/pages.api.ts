@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { BlockOut, PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
+import { ApproveResponse, BlockOut, FolderDetail, PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -64,5 +64,13 @@ export class PagesApi extends ApiBase {
 
   toggleBlockReviewed(blockId: string): Observable<BlockOut> {
     return this.http.post<BlockOut>(this.url(`/api/blocks/${blockId}/toggle-reviewed`), null);
+  }
+
+  approve(pageId: string): Observable<ApproveResponse> {
+    return this.http.post<ApproveResponse>(this.url(`/api/pages/${pageId}/approve`), null);
+  }
+
+  getFolder(folderId: string): Observable<FolderDetail> {
+    return this.http.get<FolderDetail>(this.url(`/api/folders/${folderId}`));
   }
 }

@@ -19,6 +19,7 @@ const mockBlock: TextBlockExport = {
   traducoes: [{ traducao: 'Original text', observacao: '', relevancia: 3 }],
   localizacao: '',
 };
+
 function createFixture() {
   const fixture = TestBed.createComponent(PageReviewModalComponent);
   const ref: ComponentRef<PageReviewModalComponent> = fixture.componentRef;
@@ -27,6 +28,13 @@ function createFixture() {
   fixture.detectChanges();
   return fixture;
 }
+
+/** Flush the two requests loadBlocks() makes on init: /json and /blocks. */
+function flushLoadBlocks(httpMock: HttpTestingController, blocks: TextBlockExport[] = []) {
+  httpMock.expectOne((req) => req.url.includes('/json')).flush(blocks);
+  httpMock.expectOne((req) => req.url.includes('/blocks')).flush([]);
+}
+
 describe('PageReviewModalComponent', () => {
   let httpMock: HttpTestingController;
   beforeEach(async () => {
@@ -37,13 +45,11 @@ describe('PageReviewModalComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
   afterEach(() => {
-    const pending = httpMock.match(() => true);
-    pending.forEach((req) => req.flush([]));
     httpMock.verify();
   });
   it('shows reprocess confirmation dialog on click', async () => {
     const fixture = createFixture();
-    httpMock.expectOne((req) => req.url.includes('/json')).flush([mockBlock]);
+    flushLoadBlocks(httpMock, [mockBlock]);
     await fixture.whenStable();
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -56,7 +62,7 @@ describe('PageReviewModalComponent', () => {
   });
   it('cancels reprocess without API call', async () => {
     const fixture = createFixture();
-    httpMock.expectOne((req) => req.url.includes('/json')).flush([]);
+    flushLoadBlocks(httpMock);
     await fixture.whenStable();
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -70,7 +76,7 @@ describe('PageReviewModalComponent', () => {
   });
   it('shows loading overlay during reprocess', async () => {
     const fixture = createFixture();
-    httpMock.expectOne((req) => req.url.includes('/json')).flush([]);
+    flushLoadBlocks(httpMock);
     await fixture.whenStable();
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -83,13 +89,15 @@ describe('PageReviewModalComponent', () => {
     const reprocessReq = httpMock.expectOne((req) => req.url.includes('process'));
     const response: ProcessPageResponse = { page: mockPage, blocos: [mockBlock] };
     reprocessReq.flush(response);
+    // confirmReprocess now reloads block metas
+    httpMock.expectOne((req) => req.url.includes('/blocks')).flush([]);
     await fixture.whenStable();
     fixture.detectChanges();
     expect(comp.reprocessing()).toBe(false);
   });
   it('updates form on successful reprocess', async () => {
     const fixture = createFixture();
-    httpMock.expectOne((req) => req.url.includes('/json')).flush([]);
+    flushLoadBlocks(httpMock);
     await fixture.whenStable();
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -101,6 +109,8 @@ describe('PageReviewModalComponent', () => {
     const newPage: PageSummary = { ...mockPage, block_count: 3, edited: false };
     const response: ProcessPageResponse = { page: newPage, blocos: [mockBlock] };
     reprocessReq.flush(response);
+    // confirmReprocess now reloads block metas
+    httpMock.expectOne((req) => req.url.includes('/blocks')).flush([]);
     await fixture.whenStable();
     fixture.detectChanges();
     expect(comp.blocks()).toHaveLength(1);
@@ -110,7 +120,7 @@ describe('PageReviewModalComponent', () => {
   });
   it('calls regenerate API on regenerate click', async () => {
     const fixture = createFixture();
-    httpMock.expectOne((req) => req.url.includes('/json')).flush([]);
+    flushLoadBlocks(httpMock);
     await fixture.whenStable();
     fixture.detectChanges();
     const comp = fixture.componentInstance;

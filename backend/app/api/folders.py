@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from contracts.models import TextBlockExport
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageFile, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,8 @@ from app.api.pages import (
 from app.db.deps import get_db
 from app.db.models import Folder, Page, ProcessingRun, RunType, TextBlock, Work
 from app.settings import settings
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
@@ -150,14 +152,13 @@ async def process_page_upload(
 
     try:
         img = Image.open(io.BytesIO(raw))
-        img.verify()
+        img.load()
     except (UnidentifiedImageError, Exception):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"{file.filename}: tipo de arquivo não suportado",
         ) from None
 
-    img = Image.open(io.BytesIO(raw))
     width, height = img.size
     mime_type = _PIL_TO_MIME.get(img.format or "", "application/octet-stream")
     sha256 = hashlib.sha256(raw).hexdigest()
@@ -228,14 +229,13 @@ async def upload_pages(
 
         try:
             img = Image.open(io.BytesIO(raw))
-            img.verify()
+            img.load()
         except (UnidentifiedImageError, Exception):
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail=f"{upload.filename}: tipo de arquivo não suportado",
             ) from None
 
-        img = Image.open(io.BytesIO(raw))
         width, height = img.size
         mime_type = _PIL_TO_MIME.get(img.format or "", "application/octet-stream")
 

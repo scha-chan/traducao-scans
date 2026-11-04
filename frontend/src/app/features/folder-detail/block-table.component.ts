@@ -20,12 +20,7 @@ import {
 import { BboxPx, TextBlockExport, Translation } from '../../core/api/models';
 import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
-
-interface TranslationForm {
-  traducao: FormControl<string>;
-  observacao: FormControl<string>;
-  relevancia: FormControl<1 | 2 | 3 | 4 | 5>;
-}
+import { TranslationListComponent, TranslationForm } from './translation-list.component';
 
 interface BlockForm {
   tipo: FormControl<'#' | '$'>;
@@ -38,7 +33,7 @@ interface BlockForm {
 @Component({
   selector: 'app-block-table',
   standalone: true,
-  imports: [ReactiveFormsModule, UiDialogComponent, UiButtonComponent],
+  imports: [ReactiveFormsModule, UiDialogComponent, UiButtonComponent, TranslationListComponent],
   templateUrl: './block-table.component.html',
   styleUrl: './block-table.component.scss',
 })
@@ -53,8 +48,6 @@ export class BlockTableComponent implements OnChanges {
   readonly form = this.fb.array<FormGroup<BlockForm>>([]);
 
   readonly selectedIndexChange = output<number | null>();
-
-  readonly RELEVANCE_OPTIONS: (1 | 2 | 3 | 4 | 5)[] = [1, 2, 3, 4, 5];
 
   private deleteConfirmOpen = signal(false);
   private blockToDelete = signal<number | null>(null);
@@ -227,37 +220,6 @@ export class BlockTableComponent implements OnChanges {
 
   translationsAt(i: number): FormArray<FormGroup<TranslationForm>> {
     return this.form.at(i).controls.traducoes;
-  }
-
-  addTranslationToSelected(event: Event) {
-    const i = this.selectedIndex();
-    if (i === null) return;
-    event.stopPropagation();
-    const fa = this.translationsAt(i);
-    if (fa.length >= 5) return;
-    fa.push(this.makeTranslation());
-  }
-
-  removeTranslationFromSelected(tIdx: number, event: Event) {
-    const i = this.selectedIndex();
-    if (i === null) return;
-    event.stopPropagation();
-    const fa = this.translationsAt(i);
-    if (fa.length <= 1) return;
-    fa.removeAt(tIdx);
-  }
-
-  sortTranslationsOnBlurSelected() {
-    const i = this.selectedIndex();
-    if (i === null) return;
-    const fa = this.translationsAt(i);
-    const values = fa.controls.map((c) => ({ ...c.value })) as {
-      traducao: string;
-      observacao: string;
-      relevancia: number;
-    }[];
-    const sorted = [...values].sort((a, b) => a.relevancia - b.relevancia);
-    sorted.forEach((v, idx) => fa.at(idx).setValue(v as never, { emitEvent: false }));
   }
 
   // ── Dirty / server errors ──────────────────────────────────────────────────

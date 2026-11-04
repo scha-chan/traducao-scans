@@ -27,3 +27,4 @@ redis==5.0.8
 
 # LLM translation
 anthropic>=0.40.0
+httpx>=0.28.1

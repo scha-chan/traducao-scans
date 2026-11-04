@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.deps import get_db
-from app.db.models import BlockSource, Page, PageStatus, TextBlock, TranslationSuggestion
+from app.db.models import (
+    BlockSource,
+    Page,
+    PageStatus,
+    ReviewStatus,
+    TextBlock,
+    TranslationSuggestion,
+)
 
 router = APIRouter(prefix="/blocks", tags=["blocks"])
 
@@ -223,6 +230,18 @@ async def update_suggestion(
     await db.commit()
     await db.refresh(suggestion)
     return SuggestionOut.model_validate(suggestion)
+
+
+@router.post("/{block_id}/toggle-reviewed", response_model=BlockOut)
+async def toggle_reviewed(block_id: UUID, db: AsyncSession = Depends(get_db)) -> BlockOut:
+    block = await _get_block_or_404(block_id, db)
+    if block.review_status == ReviewStatus.REVIEWED:
+        block.review_status = ReviewStatus.PENDING
+    else:
+        block.review_status = ReviewStatus.REVIEWED
+    await db.commit()
+    block = await _get_block_or_404(block_id, db)
+    return _to_block_out(block)
 
 
 @router.delete("/{block_id}/suggestions/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)

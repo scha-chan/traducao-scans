@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { debounceTime } from 'rxjs';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
-import { ReorderAutoOut } from '../../core/api/models';
+import { BlockOut, ReorderAutoOut, ReviewStatus } from '../../core/api/models';
 import { BboxPx, FolderDetail, PageExport, PageSummary, TextBlockExport } from '../../core/api/models';
 import { PagesApi } from '../../core/api/pages.api';
 import { buildPageLines } from '../../export/txt-export';
@@ -154,9 +154,31 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
             <div
               [id]="'tab-edit-' + page().id"
               role="tabpanel"
-              class="flex-1 min-h-0 flex overflow-hidden"
+              class="flex-1 min-h-0 flex flex-col overflow-hidden"
               [class.hidden]="activeTab() !== 'edit'"
             >
+              <!-- Edit toolbar: counter + filter -->
+              @if (!blocksError() && totalCount() > 0) {
+                <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-800 flex-shrink-0 gap-2">
+                  <span class="text-[11px] text-zinc-500 dark:text-zinc-400 tabular-nums">
+                    <span [class.text-emerald-600]="reviewedCount() === totalCount()" [class.dark:text-emerald-400]="reviewedCount() === totalCount()">{{ reviewedCount() }}</span>/{{ totalCount() }} revisados
+                  </span>
+                  <button
+                    type="button"
+                    class="text-[11px] font-medium rounded px-2 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 ring-primary-500"
+                    [class.bg-primary-100]="showOnlyPending()"
+                    [class.text-primary-700]="showOnlyPending()"
+                    [class.dark:bg-primary-900]="showOnlyPending()"
+                    [class.dark:text-primary-300]="showOnlyPending()"
+                    [class.text-zinc-500]="!showOnlyPending()"
+                    [class.hover:bg-zinc-100]="!showOnlyPending()"
+                    [class.dark:hover:bg-zinc-800]="!showOnlyPending()"
+                    (click)="showOnlyPending.update(v => !v)"
+                    [attr.aria-pressed]="showOnlyPending()"
+                    title="Mostrar apenas pendentes (F)"
+                  >{{ showOnlyPending() ? '● Só pendentes' : '○ Todos' }}</button>
+                </div>
+              }
               @if (blocksError()) {
                 <div class="p-4 text-sm text-red-600 dark:text-red-400 flex-1">
                   Não foi possível carregar os blocos.
@@ -165,10 +187,14 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
               }
               @else {
                 <app-block-table
+                  class="flex-1 min-h-0"
                   [blocks]="blocks()"
                   [loading]="blocksLoading()"
                   [saveState]="blockSaveState()"
+                  [reviewStatuses]="reviewStatuses()"
+                  [filterPending]="showOnlyPending()"
                   (selectedIndexChange)="onBlockSelected($event)"
+                  (toggleReviewed)="onToggleReviewed($event)"
                 />
               }
             </div>
@@ -295,7 +321,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
         <!-- Footer -->
         <div class="h-16 flex items-center justify-between px-4 border-t border-zinc-200 dark:border-zinc-700 flex-shrink-0">
           <span class="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:block">
-            J/K: navegar · T: alternar tipo · ←/→: página
+            J/K: navegar · T: tipo · R: revisado · F: filtro · ←/→: página
           </span>
           <div class="flex items-center gap-2">
             <ui-button variant="secondary" [disabled]="reprocessing()" (click)="close()">Cancelar</ui-button>
@@ -400,9 +426,15 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
   readonly imageUrl = computed(() => this.pagesApi.imageUrl(this.page()));
 
   readonly blocks = signal<TextBlockExport[]>([]);
+  readonly blockMetas = signal<{ id: string; review_status: ReviewStatus }[]>([]);
   readonly blocksLoading = signal(false);
   readonly blocksError = signal(false);
   readonly selectedBlockIndex = signal<number | null>(null);
+  readonly showOnlyPending = signal(false);
+
+  readonly reviewStatuses = computed(() => this.blockMetas().map((m) => m.review_status));
+  readonly reviewedCount = computed(() => this.blockMetas().filter((m) => m.review_status === 'REVIEWED').length);
+  readonly totalCount = computed(() => this.blockMetas().length);
 
   readonly viewerDrawMode = signal(false);
   readonly smallRectToast = signal(false);
@@ -428,6 +460,8 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
   readonly regenerating = signal(false);
 
   private blocksSub?: import('rxjs').Subscription;
+  private blockMetaSub?: import('rxjs').Subscription;
+  private toggleSub?: import('rxjs').Subscription;
   private saveSub?: import('rxjs').Subscription;
   private reorderSub?: import('rxjs').Subscription;
   private debounceSub?: import('rxjs').Subscription;
@@ -453,6 +487,8 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
   ngOnDestroy() {
     document.body.style.overflow = '';
     this.blocksSub?.unsubscribe();
+    this.blockMetaSub?.unsubscribe();
+    this.toggleSub?.unsubscribe();
     this.saveSub?.unsubscribe();
     this.reorderSub?.unsubscribe();
     this.debounceSub?.unsubscribe();
@@ -474,6 +510,7 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     clearTimeout(this.savedTimeout);
     this.autoSaveApiSub?.unsubscribe();
     this.blocksSub?.unsubscribe();
+    this.blockMetaSub?.unsubscribe();
     this.blocksSub = this.pagesApi.getJson(this.page().id).subscribe({
       next: (data) => {
         this.blocks.set(data);
@@ -482,6 +519,27 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
       error: () => {
         this.blocksError.set(true);
         this.blocksLoading.set(false);
+      },
+    });
+    this.blockMetaSub = this.pagesApi.getBlocks(this.page().id).subscribe({
+      next: (data: BlockOut[]) => {
+        const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
+        this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
+      },
+    });
+  }
+
+  onToggleReviewed(index: number) {
+    const meta = this.blockMetas()[index];
+    if (!meta) return;
+    this.toggleSub?.unsubscribe();
+    this.toggleSub = this.pagesApi.toggleBlockReviewed(meta.id).subscribe({
+      next: (updated: BlockOut) => {
+        this.blockMetas.update((metas) => {
+          const copy = [...metas];
+          copy[index] = { id: updated.id, review_status: updated.review_status };
+          return copy;
+        });
       },
     });
   }
@@ -575,6 +633,14 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
         this.blockTable?.markAsPristine();
         this.blockSaveState.set('idle');
         this.reprocessing.set(false);
+        this.blockMetas.set([]);
+        this.blockMetaSub?.unsubscribe();
+        this.blockMetaSub = this.pagesApi.getBlocks(this.page().id).subscribe({
+          next: (data: BlockOut[]) => {
+            const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
+            this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
+          },
+        });
         this.toast.success('Página reprocessada');
         this.pageReprocessed.emit(result.page);
       },
@@ -725,6 +791,17 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
       }
       if (e.key === 't' || e.key === 'T') {
         this.blockTable?.toggleType();
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        const sel = this.blockTable?.selectedIndex();
+        if (sel !== null && sel !== undefined) {
+          this.onToggleReviewed(sel);
+        }
+        return;
+      }
+      if (e.key === 'f' || e.key === 'F') {
+        this.showOnlyPending.update((v) => !v);
         return;
       }
     }

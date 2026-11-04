@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
+import { BlockOut, PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -56,5 +56,13 @@ export class PagesApi extends ApiBase {
 
   regenerate(pageId: string): Observable<RegenerateResponse> {
     return this.http.post<RegenerateResponse>(this.url(`/api/pages/${pageId}/regenerate`), null);
+  }
+
+  getBlocks(pageId: string): Observable<BlockOut[]> {
+    return this.http.get<BlockOut[]>(this.url(`/api/pages/${pageId}/blocks`));
+  }
+
+  toggleBlockReviewed(blockId: string): Observable<BlockOut> {
+    return this.http.post<BlockOut>(this.url(`/api/blocks/${blockId}/toggle-reviewed`), null);
   }
 }

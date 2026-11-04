@@ -103,3 +103,38 @@ Script: `evals/golden_metrics.py` · Gabarito: `gabarito.meta.json` · Executado
 - **Recall de detecção:** ≥ 0,85 (meta provisória, calibrar após linha de base)
 - **CER médio:** ≤ 0,10 (meta provisória)
 - **Acurácia #/$:** ≥ 0,90 (meta fixada em F4-AG-03)
+
+---
+
+## Avaliação qualitativa de tradução — F5-QA-01
+
+Revisão humana das traduções geradas pelo agente em 2 imagens golden (16 blocos, cobrindo
+`pagina_01.webp` + `banner_01.png`). Planilha completa em `docs/avaliacao_qualitativa.csv`.
+
+### Critérios (1–5)
+
+| Dimensão | 1 | 3 | 5 |
+|---|---|---|---|
+| **Fidelidade** | Sentido diverge do original | Sentido aproximado | Sentido idêntico |
+| **Naturalidade PT-BR** | Português estranho / literal | Compreensível com ressalvas | Fluente e natural |
+| **Utilidade da observação** | Ausente ou enganosa | Adiciona algum contexto | Explica ambiguidade ou contexto cultural |
+
+### Resultados por página (executado em 2026-11-04)
+
+| Arquivo | Blocos avaliados | Fidelidade média | Naturalidade média | Utilidade obs. média |
+|---|---|---|---|---|
+| pagina_01.webp | 12 | **4,83** | **4,83** | **3,17** |
+| banner_01.png | 4 | **4,75** | **5,00** | **4,00** |
+| **Total** | **16** | **4,81** | **4,88** | **3,44** |
+
+### Score agregado
+
+| Métrica | Score médio | Meta F5 |
+|---|---|---|
+| Fidelidade | 4,81 / 5 | ≥ 4,0 ✅ |
+| Naturalidade | 4,88 / 5 | ≥ 4,0 ✅ |
+| Utilidade da observação | 3,44 / 5 | ≥ 3,0 ✅ |
+| **Composite (média simples)** | **4,38 / 5** | ≥ 3,7 ✅ |
+
+> Avaliação inicial com as 2 imagens de referência disponíveis. Expandir para ≥ 10 páginas
+> reais quando o golden set completo estiver disponível (ver PRD §17.9).

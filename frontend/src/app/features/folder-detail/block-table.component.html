@@ -27,8 +27,10 @@
       <div class="flex-1 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
         @for (block of form.controls; track $index; let i = $index) {
           @let tipo = block.controls.tipo.value;
+          @let reviewed = (reviewStatuses()[i] ?? 'PENDING') === 'REVIEWED';
           <div
             class="group relative cursor-pointer transition-colors px-2 py-2"
+            [class.hidden]="filterPending() && reviewed"
             [class.bg-primary-50]="selectedIndex() === i"
             [class.dark:bg-primary-950]="selectedIndex() === i"
             [class.hover:bg-zinc-50]="selectedIndex() !== i"
@@ -41,6 +43,25 @@
             [attr.aria-selected]="selectedIndex() === i"
           >
             <div class="flex items-start gap-1.5">
+              <!-- Reviewed indicator -->
+              <button
+                type="button"
+                class="mt-0.5 flex-shrink-0 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 ring-primary-500"
+                [class.text-emerald-500]="reviewed"
+                [class.dark:text-emerald-400]="reviewed"
+                [class.text-zinc-300]="!reviewed"
+                [class.dark:text-zinc-600]="!reviewed"
+                [class.hover:text-emerald-500]="!reviewed"
+                [class.dark:hover:text-emerald-400]="!reviewed"
+                (click)="toggleReviewedAt(i, $event)"
+                [attr.aria-label]="reviewed ? 'Marcar como pendente' : 'Marcar como revisado'"
+                [attr.title]="reviewed ? 'Marcar como pendente (R)' : 'Marcar como revisado (R)'"
+              >
+                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+
               <!-- Order -->
               <span
                 class="text-[10px] font-mono font-bold tabular-nums leading-none mt-0.5 flex-shrink-0 w-4 text-right"
@@ -63,9 +84,14 @@
               >{{ tipo }}</span>
 
               <!-- Original preview -->
-              <span class="flex-1 min-w-0 text-[11px] text-zinc-700 dark:text-zinc-300 line-clamp-2 leading-snug font-jp">
-                {{ block.controls.original.value || '—' }}
-              </span>
+              <span
+                class="flex-1 min-w-0 text-[11px] line-clamp-2 leading-snug font-jp"
+                [class.text-zinc-400]="reviewed"
+                [class.dark:text-zinc-500]="reviewed"
+                [class.line-through]="reviewed"
+                [class.text-zinc-700]="!reviewed"
+                [class.dark:text-zinc-300]="!reviewed"
+              >{{ block.controls.original.value || '—' }}</span>
             </div>
 
             <!-- Move + delete (on hover) -->

@@ -17,7 +17,7 @@ import {
   NonNullableFormBuilder,
   Validators,
 } from '@angular/forms';
-import { BboxPx, TextBlockExport, Translation } from '../../core/api/models';
+import { BboxPx, ReviewStatus, TextBlockExport, Translation } from '../../core/api/models';
 import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { TranslationListComponent, TranslationForm } from './translation-list.component';
@@ -43,11 +43,14 @@ export class BlockTableComponent implements OnChanges {
   readonly blocks = input.required<TextBlockExport[]>();
   readonly loading = input<boolean>(false);
   readonly saveState = input<BlockSaveState>('idle');
+  readonly reviewStatuses = input<ReviewStatus[]>([]);
+  readonly filterPending = input<boolean>(false);
 
   readonly selectedIndex = signal<number | null>(null);
   readonly form = this.fb.array<FormGroup<BlockForm>>([]);
 
   readonly selectedIndexChange = output<number | null>();
+  readonly toggleReviewed = output<number>();
 
   private deleteConfirmOpen = signal(false);
   private blockToDelete = signal<number | null>(null);
@@ -127,6 +130,16 @@ export class BlockTableComponent implements OnChanges {
     const next = i === null ? max : Math.max(i - 1, 0);
     this.selectedIndex.set(next);
     this.selectedIndexChange.emit(next);
+  }
+
+  toggleReviewedAt(i: number, event: Event) {
+    event.stopPropagation();
+    this.toggleReviewed.emit(i);
+  }
+
+  isVisible(i: number): boolean {
+    if (!this.filterPending()) return true;
+    return (this.reviewStatuses()[i] ?? 'PENDING') !== 'REVIEWED';
   }
 
   toggleType() {

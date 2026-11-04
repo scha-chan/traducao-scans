@@ -19,6 +19,7 @@ import { BboxPx, FolderDetail, PageExport, PageSummary, TextBlockExport } from '
 import { PagesApi } from '../../core/api/pages.api';
 import { buildPageLines } from '../../export/txt-export';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
+import { UiKbdLegendComponent, KbdShortcut } from '../../shared/ui';
 import { PageImageViewerComponent } from './page-image-viewer.component';
 import { BlockSaveState, BlockTableComponent } from './block-table.component';
 import { ToastService } from '../../shared/ui/ui-toast/toast.service';
@@ -34,7 +35,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
 @Component({
   selector: 'app-page-review-modal',
   standalone: true,
-  imports: [UiButtonComponent, PageImageViewerComponent, BlockTableComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder],
+  imports: [UiButtonComponent, UiKbdLegendComponent, PageImageViewerComponent, BlockTableComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder],
   template: `
     <!-- Overlay -->
     <div
@@ -320,9 +321,7 @@ const TABS: { id: 'edit' | 'order' | 'preview'; label: string }[] = [
 
         <!-- Footer -->
         <div class="h-16 flex items-center justify-between px-4 border-t border-zinc-200 dark:border-zinc-700 flex-shrink-0">
-          <span class="text-xs text-zinc-400 dark:text-zinc-500 hidden sm:block">
-            J/K: navegar · T: tipo · R: revisado · F: filtro · ←/→: página
-          </span>
+          <ui-kbd-legend [shortcuts]="kbdShortcuts" class="hidden sm:inline-flex" />
           <div class="flex items-center gap-2">
             <ui-button variant="secondary" [disabled]="reprocessing()" (click)="close()">Cancelar</ui-button>
             <ui-button
@@ -408,6 +407,14 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
   private readonly toast = inject(ToastService);
 
   readonly tabs = TABS;
+
+  readonly kbdShortcuts: KbdShortcut[] = [
+    { keys: ['J', 'K'], label: 'navegar' },
+    { keys: ['T'], label: 'tipo' },
+    { keys: ['R'], label: 'revisado' },
+    { keys: ['F'], label: 'filtro' },
+    { keys: ['←', '→'], label: 'página' },
+  ];
 
   readonly folder = input.required<FolderDetail>();
   readonly page = input.required<PageSummary>();

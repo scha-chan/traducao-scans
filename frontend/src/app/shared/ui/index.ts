@@ -17,3 +17,6 @@ export { UiProgressComponent } from './ui-progress.component';
 export { UiDropzoneComponent } from './ui-dropzone.component';
 
 export { UiEmptyStateComponent } from './ui-empty-state.component';
+
+export { UiKbdComponent, UiKbdLegendComponent } from './ui-kbd.component';
+export type { KbdShortcut } from './ui-kbd.component';

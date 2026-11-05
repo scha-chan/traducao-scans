@@ -107,7 +107,7 @@ class Folder(Base):
 
     work: Mapped["Work"] = relationship(back_populates="folders")
     pages: Mapped[list["Page"]] = relationship(
-        back_populates="folder", cascade="all, delete-orphan"
+        back_populates="folder", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -143,13 +143,13 @@ class Page(Base):
 
     folder: Mapped["Folder"] = relationship(back_populates="pages")
     character_mentions: Mapped[list["CharacterMention"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
     processing_runs: Mapped[list["ProcessingRun"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
     text_blocks: Mapped[list["TextBlock"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -177,7 +177,7 @@ class Character(Base):
 
     work: Mapped["Work"] = relationship(back_populates="characters")
     mentions: Mapped[list["CharacterMention"]] = relationship(
-        back_populates="character", cascade="all, delete-orphan"
+        back_populates="character", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -278,7 +278,7 @@ class TextBlock(Base):
     page: Mapped["Page"] = relationship(back_populates="text_blocks")
     processing_run: Mapped["ProcessingRun | None"] = relationship(back_populates="text_blocks")
     translation_suggestions: Mapped[list["TranslationSuggestion"]] = relationship(
-        back_populates="text_block", cascade="all, delete-orphan"
+        back_populates="text_block", cascade="all, delete-orphan", passive_deletes=True
     )
     character_mentions: Mapped[list["CharacterMention"]] = relationship(back_populates="text_block")
 
@@ -336,7 +336,7 @@ class GlossaryEntry(Base):
 
     work: Mapped["Work"] = relationship(back_populates="glossary_entries")
     occurrences: Mapped[list["GlossaryOccurrence"]] = relationship(
-        back_populates="entry", cascade="all, delete-orphan"
+        back_populates="entry", cascade="all, delete-orphan", passive_deletes=True
     )
 
 

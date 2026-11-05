@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { FoldersApi } from '../../core/api/folders.api';
 import { PagesApi } from '../../core/api/pages.api';
+import { NotificationService } from '../../core/notifications/notification.service';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { UiDropzoneComponent } from '../../shared/ui/ui-dropzone.component';
 import { UiProgressComponent } from '../../shared/ui/ui-progress.component';
@@ -139,6 +140,7 @@ export class NewTranslationPage implements OnDestroy {
   private readonly router = inject(Router);
   private readonly foldersApi = inject(FoldersApi);
   private readonly pagesApi = inject(PagesApi);
+  private readonly notifications = inject(NotificationService);
 
   readonly appState = signal<AppState>('selecao');
   readonly accepted = signal<AcceptedFile[]>([]);
@@ -244,7 +246,7 @@ export class NewTranslationPage implements OnDestroy {
     this.processNext(files, 0);
   }
 
-  private processNext(files: AcceptedFile[], index: number) {
+  private async processNext(files: AcceptedFile[], index: number): Promise<void> {
     if (this.abortController?.signal.aborted || index >= files.length) {
       if (!this.abortController?.signal.aborted) {
         this.router.navigate(['/pastas', this.folderId]);
@@ -256,20 +258,39 @@ export class NewTranslationPage implements OnDestroy {
     const start = Date.now();
     this.currentFile.set(item.file.name);
 
-    this.pagesApi.process(this.folderId, item.file, item.pageNumber).subscribe({
-      next: () => {
-        this.trackDuration(Date.now() - start);
-        this.successCount.update((n) => n + 1);
-        this.processed.update((n) => n + 1);
-        this.updateTimeRemaining(files.length - index - 1);
-        this.processNext(files, index + 1);
-      },
-      error: () => {
-        this.errorCountProcessing.update((n) => n + 1);
-        this.processed.update((n) => n + 1);
-        this.processNext(files, index + 1);
-      },
-    });
+    try {
+      const { page_id } = await new Promise<{ page_id: string }>((resolve, reject) => {
+        this.pagesApi.process(this.folderId, item.file, item.pageNumber).subscribe({
+          next: (res) => resolve({ page_id: res.page_id ?? '' }),
+          error: reject,
+        });
+      });
+
+      if (page_id) {
+        const ev = await this.pagesApi.waitForEvent(page_id);
+        const blocks = ev.block_count ?? 0;
+        this.notifications.add(
+          `Página ${item.pageNumber} concluída`,
+          `${item.file.name} — ${blocks} bloco${blocks !== 1 ? 's' : ''} detectado${blocks !== 1 ? 's' : ''}`,
+          'success',
+        );
+      }
+
+      this.trackDuration(Date.now() - start);
+      this.successCount.update((n) => n + 1);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.notifications.add(
+        `Erro na página ${item.pageNumber}`,
+        `${item.file.name} — ${msg}`,
+        'error',
+      );
+      this.errorCountProcessing.update((n) => n + 1);
+    }
+
+    this.processed.update((n) => n + 1);
+    this.updateTimeRemaining(files.length - index - 1);
+    await this.processNext(files, index + 1);
   }
 
   private trackDuration(ms: number) {

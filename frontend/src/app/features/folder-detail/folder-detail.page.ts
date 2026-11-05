@@ -240,15 +240,22 @@ export class FolderDetailPage implements OnInit, OnDestroy {
 
   reprocess(page: PageSummary) {
     this.retryingIds.update((ids) => [...ids, page.id]);
+    this.updatePageStatus(page.id, 'PROCESSING');
     this.pagesApi.reprocess(page.id).subscribe({
-      next: (result) => {
-        const f = this.folder();
-        if (f) {
-          this.folder.set({ ...f, pages: f.pages.map((p) => (p.id === page.id ? result.page : p)) });
+      next: async (result) => {
+        const pageId = result.page_id ?? page.id;
+        try {
+          await this.pagesApi.waitForEvent(pageId);
+          const folderId = this.route.snapshot.paramMap.get('folderId')!;
+          this.loadFolder(folderId);
+        } catch {
+          this.updatePageStatus(page.id, 'ERROR');
+        } finally {
+          this.retryingIds.update((ids) => ids.filter((id) => id !== page.id));
         }
-        this.retryingIds.update((ids) => ids.filter((id) => id !== page.id));
       },
       error: () => {
+        this.updatePageStatus(page.id, 'ERROR');
         this.retryingIds.update((ids) => ids.filter((id) => id !== page.id));
       },
     });

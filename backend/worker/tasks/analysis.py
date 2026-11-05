@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -32,7 +33,13 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
     and handles exponential-backoff retry for transient failures.
     """
     db_factory: async_sessionmaker[AsyncSession] = ctx["db_factory"]
+    redis_client = ctx.get("redis")
     attempt: int = ctx.get("job_try", 1)
+
+    async def _publish(event: str, **extra: object) -> None:
+        if redis_client is not None:
+            payload = json.dumps({"event": event, "page_id": page_id, "run_id": run_id, **extra})
+            await redis_client.publish(f"page:{page_id}:events", payload)
 
     async with db_factory() as db:
         run: ProcessingRun | None = await db.get(ProcessingRun, UUID(run_id))
@@ -55,6 +62,7 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
                 success_page.status = PageStatus.REVIEW
             await db.commit()
 
+            await _publish("done", block_count=block_count)
             logger.info("Page %s analysed: %d blocks", page_id, block_count)
             return {"ok": True, "page_id": page_id, "block_count": block_count}
 
@@ -78,6 +86,7 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
                 error_page.status = PageStatus.ERROR
                 error_page.error_message = str(exc)
             await db.commit()
+            await _publish("error", message=str(exc))
             logger.exception("Fatal error on page %s attempt %d", page_id, attempt)
             raise
 

@@ -1,4 +1,4 @@
-"""ClaudeTranslationProvider — LLM-backed JA→PT translation (F5-AG-03)."""
+"""ClaudeTranslationProvider / OllamaTranslationProvider — LLM-backed JA→PT translation."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 from pydantic import BaseModel, Field, ValidationError
 
 from agent.cache import TranslationCache, dialogue_cache_key
@@ -26,6 +27,8 @@ from agent.state import (
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "claude-haiku-5-5"
+_DEFAULT_OLLAMA_MODEL = "llama3.1"
+_DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 _MAX_COST_PER_PAGE_USD: float = float(os.environ.get("MAX_COST_PER_PAGE_USD") or "0.05")
 _DEFAULT_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
@@ -372,3 +375,159 @@ class ClaudeTranslationProvider:
                     detail={"cost_usd": total, "limit_usd": max_cost},
                 )
             )
+
+
+class OllamaTranslationProvider:
+    """Translate manga dialogue via a local Ollama instance.
+
+    Calls ``POST <base_url>/api/chat`` with the same system prompt and JSON
+    schema used by ClaudeTranslationProvider, so the two are drop-in
+    replacements for each other.
+
+    Environment variables:
+        OLLAMA_BASE_URL              Ollama server URL  (default: http://localhost:11434)
+        OLLAMA_TRANSLATION_MODEL     Model tag          (default: llama3.1)
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        prompts_dir: str | Path | None = None,
+        max_retries: int = 2,
+        cache: TranslationCache | None = None,
+    ) -> None:
+        self._base_url: str = (
+            base_url or os.environ.get("OLLAMA_BASE_URL") or _DEFAULT_OLLAMA_BASE_URL
+        )
+        self._model: str = (
+            model or os.environ.get("OLLAMA_TRANSLATION_MODEL") or _DEFAULT_OLLAMA_MODEL
+        )
+        self._prompts_dir = Path(prompts_dir) if prompts_dir is not None else _DEFAULT_PROMPTS_DIR
+        self._max_retries = max_retries
+        self._cache = cache
+
+    def _load_system_prompt(self, prompt_version: str) -> str:
+        prompt_path = self._prompts_dir / f"translate_page.{prompt_version}.txt"
+        if not prompt_path.exists():
+            logger.warning("Prompt version %s not found, falling back to v1", prompt_version)
+            prompt_path = self._prompts_dir / "translate_page.v1.txt"
+        return prompt_path.read_text(encoding="utf-8")
+
+    def _build_user_message(self, dialogue: DialogueState) -> str:
+        payload: dict[str, Any] = {  # noqa: ANN401
+            "original": dialogue.original or "",
+            "type": dialogue.type,
+            "location": dialogue.location,
+            "ocr_confidence": dialogue.ocr_confidence,
+        }
+        if dialogue.glossary_hints:
+            payload["glossary"] = [
+                {
+                    "source_term": h.source_term,
+                    "preferred_translation": h.preferred_translation,
+                    "category": h.category,
+                    "notes": h.notes,
+                }
+                for h in dialogue.glossary_hints
+            ]
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _call_api(self, system_prompt: str, messages: list[dict[str, str]]) -> str:
+        url = f"{self._base_url}/api/chat"
+        payload = {
+            "model": self._model,
+            "stream": False,
+            "messages": [{"role": "system", "content": system_prompt}, *messages],
+        }
+        resp = httpx.post(url, json=payload, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        return str(data.get("message", {}).get("content", ""))
+
+    def translate_dialogue(
+        self,
+        dialogue: DialogueState,
+        prompt_version: str,
+        state: PageAnalysisState | None = None,
+    ) -> list[TranslationCandidate]:
+        effective_version = state.prompt_version if state is not None else prompt_version
+        cache_key = dialogue_cache_key(dialogue, effective_version)
+
+        if self._cache is not None:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                logger.debug(
+                    "cache_hit dialogue=%s prompt_version=%s", dialogue.id, effective_version
+                )
+                return cached
+
+        system_prompt = self._load_system_prompt(effective_version)
+        user_message = self._build_user_message(dialogue)
+        t0 = time.monotonic()
+
+        messages: list[dict[str, str]] = [{"role": "user", "content": user_message}]
+        candidates: list[TranslationCandidate] = []
+        last_error = ""
+
+        for attempt in range(self._max_retries + 1):
+            response_text = self._call_api(system_prompt, messages)
+            try:
+                parsed = LLMTranslationResponse.model_validate_json(response_text)
+                candidates = [
+                    TranslationCandidate(
+                        translation=c.traducao,
+                        observation=c.observacao,
+                        relevance=c.relevancia,
+                    )
+                    for c in parsed.candidates
+                ]
+                break
+            except (ValidationError, json.JSONDecodeError, ValueError) as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "ollama_translation attempt=%d/%d failed dialogue=%s: %s",
+                    attempt + 1,
+                    self._max_retries + 1,
+                    dialogue.id,
+                    last_error,
+                )
+                if attempt < self._max_retries:
+                    messages.append({"role": "assistant", "content": response_text})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Your previous response was not valid JSON or did not match "
+                                f"the required schema. Error: {last_error}\n"
+                                "Please respond again with ONLY the JSON object as specified."
+                            ),
+                        }
+                    )
+
+        if not candidates:
+            dialogue.needs_review = True
+            dialogue.review_reason = "llm_translation_failed"
+        else:
+            if self._cache is not None:
+                self._cache.set(cache_key, candidates)
+
+        if state is not None:
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            state.spans.append(
+                ProviderSpan(
+                    span_id=str(uuid.uuid4()),
+                    run_id=str(state.run_id),
+                    stage="translation",
+                    provider="ollama",
+                    model_version=self._model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    latency_ms=latency_ms,
+                    cost_usd=0.0,
+                    success=bool(candidates),
+                    fallback_used=False,
+                )
+            )
+
+        return candidates

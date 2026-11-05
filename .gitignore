@@ -26,3 +26,15 @@ __pycache__/
 # MCP config (pode conter tokens)
 .mcp.json
 contracts/manga_contracts.egg-info/
+
+# Angular build cache
+.angular/
+
+# Modelos ML locais (grandes binários, não versionar)
+backend/models/
+
+# Arquivos temporários
+backend/**/*.bak
+
+# Resultados de evals
+evals/results/

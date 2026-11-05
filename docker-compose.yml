@@ -35,7 +35,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
-      - media_data:/app/media
+      - media_data:/app/backend/uploads
+      - ./backend/models:/app/backend/models
     depends_on:
       db:
         condition: service_healthy
@@ -52,8 +53,10 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-manga}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-manga_translator}
       REDIS_URL: redis://redis:6379/0
+      MANGA_OCR_MODEL: /app/backend/models/manga-ocr
     volumes:
-      - media_data:/app/media
+      - media_data:/app/backend/uploads
+      - ./backend/models:/app/backend/models
     depends_on:
       db:
         condition: service_healthy

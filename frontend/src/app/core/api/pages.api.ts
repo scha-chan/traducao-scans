@@ -1,25 +1,43 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { ApproveResponse, BlockOut, FolderDetail, PageSummary, TextBlockExport, ProcessPageResponse, AnalyzeResponse, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
+import { ApproveResponse, AnalyzeResponse, BlockOut, FolderDetail, PageEvent, PageSummary, TextBlockExport, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
-  process(folderId: string, file: File, pageNumber: number): Observable<ProcessPageResponse> {
+  process(folderId: string, file: File, pageNumber: number): Observable<AnalyzeResponse> {
     const body = new FormData();
     body.append('file', file);
     body.append('page_number', String(pageNumber));
-    return this.http.post<ProcessPageResponse>(
+    return this.http.post<AnalyzeResponse>(
       this.url(`/api/folders/${folderId}/pages/process`),
       body
     );
   }
 
-  reprocess(pageId: string): Observable<ProcessPageResponse> {
-    return this.http.post<ProcessPageResponse>(
+  reprocess(pageId: string): Observable<AnalyzeResponse> {
+    return this.http.post<AnalyzeResponse>(
       this.url(`/api/pages/${pageId}/process?force=true`),
       null
     );
+  }
+
+  events(pageId: string): EventSource {
+    return new EventSource(this.url(`/api/pages/${pageId}/events`));
+  }
+
+  waitForEvent(pageId: string): Promise<PageEvent> {
+    return new Promise((resolve, reject) => {
+      const es = this.events(pageId);
+      es.onmessage = ({ data }) => {
+        const ev: PageEvent = JSON.parse(data);
+        if (ev.event === 'done' || ev.event === 'error') {
+          es.close();
+          if (ev.event === 'done') { resolve(ev); } else { reject(new Error(ev.message ?? 'Erro no processamento')); }
+        }
+      };
+      es.onerror = () => { es.close(); reject(new Error('Conexão SSE perdida')); };
+    });
   }
 
   getJson(pageId: string): Observable<TextBlockExport[]> {

@@ -87,6 +87,15 @@ export interface FolderExport {
 
 export interface AnalyzeResponse {
   run_id: string;
+  page_id?: string;
+}
+
+export interface PageEvent {
+  event: 'connected' | 'done' | 'error';
+  page_id?: string;
+  run_id?: string;
+  block_count?: number;
+  message?: string;
 }
 
 export type SpeechRegister = 'formal' | 'informal' | 'childlike' | 'rough' | 'polite';

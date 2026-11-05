@@ -14,6 +14,8 @@ import {
   Validators,
 } from '@angular/forms';
 import { NgClass } from '@angular/common';
+import { UiDialogComponent } from '../../shared/ui/ui-dialog.component';
+import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 
 export interface TranslationForm {
   traducao: FormControl<string>;
@@ -47,7 +49,7 @@ export function sortTranslationArray(fa: FormArray<FormGroup<TranslationForm>>):
 @Component({
   selector: 'app-translation-list',
   standalone: true,
-  imports: [ReactiveFormsModule, NgClass],
+  imports: [ReactiveFormsModule, NgClass, UiDialogComponent, UiButtonComponent],
   template: `
 <div class="space-y-2">
   @for (ctrl of sortedControls(); track ctrl; let i = $index) {
@@ -79,7 +81,7 @@ export function sortTranslationArray(fa: FormArray<FormGroup<TranslationForm>>):
         type="button"
         class="icon-btn text-zinc-400 hover:text-red-500 dark:hover:text-red-400 flex-shrink-0 mt-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
         [disabled]="control().length <= 1"
-        (click)="removeSuggestion(ctrl)"
+        (click)="startRemoveSuggestion(ctrl)"
         [attr.aria-label]="'Remover sugestão ' + (i + 1)"
       >
         <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -88,6 +90,17 @@ export function sortTranslationArray(fa: FormArray<FormGroup<TranslationForm>>):
       </button>
     </div>
   }
+
+  <ui-dialog [open]="showRemoveDialog()" (closed)="cancelRemoveSuggestion()">
+    <div class="p-6 flex flex-col gap-4">
+      <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-100">Remover sugestão</h2>
+      <p class="text-sm text-zinc-600 dark:text-zinc-400">Tem certeza que deseja remover esta sugestão de tradução?</p>
+      <div class="flex justify-end gap-2">
+        <ui-button variant="ghost" size="sm" (click)="cancelRemoveSuggestion()">Cancelar</ui-button>
+        <ui-button variant="destructive" size="sm" (click)="confirmRemoveSuggestion()">Remover</ui-button>
+      </div>
+    </div>
+  </ui-dialog>
 
   <button
     type="button"
@@ -102,8 +115,10 @@ export function sortTranslationArray(fa: FormArray<FormGroup<TranslationForm>>):
 export class TranslationListComponent {
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly sortTick = signal(0);
+  private readonly pendingRemove = signal<FormGroup<TranslationForm> | null>(null);
 
   readonly control = input.required<FormArray<FormGroup<TranslationForm>>>();
+  readonly showRemoveDialog = computed(() => this.pendingRemove() !== null);
 
   readonly getBadgeClass = getBadgeClass;
 
@@ -133,11 +148,23 @@ export class TranslationListComponent {
     this.sortTick.update((v) => v + 1);
   }
 
-  removeSuggestion(ctrl: FormGroup<TranslationForm>): void {
+  startRemoveSuggestion(ctrl: FormGroup<TranslationForm>): void {
     const fa = this.control();
     if (fa.length <= 1) return;
+    this.pendingRemove.set(ctrl);
+  }
+
+  confirmRemoveSuggestion(): void {
+    const ctrl = this.pendingRemove();
+    if (!ctrl) return;
+    const fa = this.control();
     const i = fa.controls.indexOf(ctrl);
     if (i >= 0) fa.removeAt(i);
     this.sortTick.update((v) => v + 1);
+    this.pendingRemove.set(null);
+  }
+
+  cancelRemoveSuggestion(): void {
+    this.pendingRemove.set(null);
   }
 }

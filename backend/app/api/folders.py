@@ -16,11 +16,10 @@ from sqlalchemy.orm import selectinload
 
 from app import queue
 from app.api.pages import (
+    AnalyzeOut,
     PageOut,
-    ProcessPageOut,
     _block_to_export,
     _dispatch_and_wait,
-    _page_to_summary,
 )
 from app.db.deps import get_db
 from app.db.models import Folder, Page, PageStatus, ProcessingRun, RunType, TextBlock, Work
@@ -55,31 +54,70 @@ class FolderUpdate(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
 
 
+def _folder_status(pages: list["Page"]) -> str:
+    if not pages:
+        return "INCOMPLETE"
+    statuses = {p.status for p in pages}
+    if PageStatus.PROCESSING in statuses or PageStatus.PENDING in statuses:
+        return "PROCESSING"
+    if all(p.status == PageStatus.APPROVED for p in pages):
+        return "DONE"
+    if all(p.status in (PageStatus.APPROVED, PageStatus.ERROR) for p in pages):
+        return "DONE_WITH_ERRORS"
+    return "INCOMPLETE"
+
+
 class FolderOut(BaseModel):
     id: UUID
     name: str
     work_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    status: str = "INCOMPLETE"
+    total_pages: int = 0
+    processed_pages: int = 0
+    error_pages: int = 0
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def from_folder(cls, folder: "Folder") -> "FolderOut":
+        pages = folder.pages if folder.pages is not None else []
+        processed = sum(1 for p in pages if p.status in (PageStatus.APPROVED, PageStatus.REVIEW))
+        errors = sum(1 for p in pages if p.status == PageStatus.ERROR)
+        return cls(
+            id=folder.id,
+            name=folder.name,
+            work_id=folder.work_id,
+            created_at=folder.created_at,
+            updated_at=folder.updated_at,
+            status=_folder_status(pages),
+            total_pages=len(pages),
+            processed_pages=processed,
+            error_pages=errors,
+        )
+
 
 async def _get_or_404(folder_id: UUID, db: AsyncSession) -> Folder:
-    result = await db.get(Folder, folder_id)
-    if result is None:
+    result = await db.execute(
+        select(Folder).options(selectinload(Folder.pages)).where(Folder.id == folder_id)
+    )
+    folder = result.scalar_one_or_none()
+    if folder is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pasta não encontrada")
-    return result
+    return folder
 
 
 @router.get("", response_model=list[FolderOut])
-async def list_folders(db: AsyncSession = Depends(get_db)) -> list[Folder]:
-    result = await db.execute(select(Folder).order_by(Folder.created_at.desc()))
-    return list(result.scalars().all())
+async def list_folders(db: AsyncSession = Depends(get_db)) -> list[FolderOut]:
+    result = await db.execute(
+        select(Folder).options(selectinload(Folder.pages)).order_by(Folder.created_at.desc())
+    )
+    return [FolderOut.from_folder(f) for f in result.scalars().all()]
 
 
 @router.post("", response_model=FolderOut, status_code=status.HTTP_201_CREATED)
-async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) -> Folder:
+async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) -> FolderOut:
     if body.work_id is not None:
         work = await db.get(Work, body.work_id)
         if work is None:
@@ -101,19 +139,18 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
             status_code=status.HTTP_409_CONFLICT,
             detail="Já existe uma pasta com esse nome",
         ) from None
-    await db.refresh(folder)
-    return folder
+    return FolderOut.from_folder(await _get_or_404(folder.id, db))
 
 
 @router.get("/{folder_id}", response_model=FolderOut)
-async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> Folder:
-    return await _get_or_404(folder_id, db)
+async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> FolderOut:
+    return FolderOut.from_folder(await _get_or_404(folder_id, db))
 
 
 @router.patch("/{folder_id}", response_model=FolderOut)
 async def update_folder(
     folder_id: UUID, body: FolderUpdate, db: AsyncSession = Depends(get_db)
-) -> Folder:
+) -> FolderOut:
     folder = await _get_or_404(folder_id, db)
     folder.name = body.name
     try:
@@ -124,8 +161,7 @@ async def update_folder(
             status_code=status.HTTP_409_CONFLICT,
             detail="Já existe uma pasta com esse nome",
         ) from None
-    await db.refresh(folder)
-    return folder
+    return FolderOut.from_folder(await _get_or_404(folder_id, db))
 
 
 @router.delete("/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -135,13 +171,18 @@ async def delete_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> 
     await db.commit()
 
 
-@router.post("/{folder_id}/pages/process", response_model=ProcessPageOut, tags=["pages"])
+@router.post(
+    "/{folder_id}/pages/process",
+    response_model=AnalyzeOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["pages"],
+)
 async def process_page_upload(
     folder_id: UUID,
     file: UploadFile,
     page_number: int = Form(...),
     db: AsyncSession = Depends(get_db),
-) -> ProcessPageOut:
+) -> AnalyzeOut:
     folder = await _get_or_404(folder_id, db)
     dest_dir = Path(settings.upload_dir) / "folders" / str(folder_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -192,12 +233,22 @@ async def process_page_upload(
     await db.flush()
 
     run = ProcessingRun(page_id=page.id, run_type=RunType.FULL)
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
     pool = await queue.get_pool()
-    blocks = await _dispatch_and_wait(pool, db, page, run)
-    return ProcessPageOut(
-        page=_page_to_summary(page, blocks),
-        blocos=[_block_to_export(b) for b in blocks],
-    )
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        page.status = PageStatus.ERROR
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de análise",
+        )
+
+    return AnalyzeOut(run_id=run.id, page_id=page.id)
 
 
 @router.post(

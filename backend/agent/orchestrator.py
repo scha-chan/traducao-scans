@@ -90,10 +90,24 @@ def build_pipeline() -> Orchestrator:
     confidence = LowConfidenceStage(threshold=ocr_threshold)
     ocr_reprocess = OcrReprocessStage(provider=shared_ocr_provider, threshold=ocr_threshold)
     translation_cache = TranslationCache()
-    llm_translation_provider = ClaudeTranslationProvider(
-        cache=translation_cache,
-        fallback_model=os.environ.get("ANTHROPIC_TRANSLATION_FALLBACK_MODEL"),
+    llm_provider_name: str = os.environ.get("LLM_PROVIDER") or (
+        "ollama" if os.environ.get("OLLAMA_BASE_URL") else "claude"
     )
+    if llm_provider_name == "ollama":
+        from agent.providers.llm_translation import OllamaTranslationProvider  # noqa: PLC0415
+
+        llm_translation_provider: ClaudeTranslationProvider | OllamaTranslationProvider = (
+            OllamaTranslationProvider(cache=translation_cache)
+        )
+        logger.info(
+            "llm_provider=ollama model=%s", os.environ.get("OLLAMA_TRANSLATION_MODEL") or "llama3.1"
+        )
+    else:
+        llm_translation_provider = ClaudeTranslationProvider(
+            cache=translation_cache,
+            fallback_model=os.environ.get("ANTHROPIC_TRANSLATION_FALLBACK_MODEL"),
+        )
+        logger.info("llm_provider=claude")
     translation = TranslationStage(provider=llm_translation_provider)
     handwritten = HandwrittenStage()
     divisa = DivisaStage()

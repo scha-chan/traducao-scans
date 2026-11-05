@@ -369,6 +369,39 @@ class GlossaryOccurrence(Base):
     text_block: Mapped["TextBlock | None"] = relationship()
 
 
+class LogLevel(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    SUCCESS = "SUCCESS"
+
+
+class ProcessingLog(Base):
+    """Granular event log for each processing run stage."""
+
+    __tablename__ = "processing_logs"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("processing_runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    page_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    level: Mapped[LogLevel] = mapped_column(
+        Enum(LogLevel, name="log_level"), nullable=False, default=LogLevel.INFO
+    )
+    stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    run: Mapped["ProcessingRun | None"] = relationship()
+    page: Mapped["Page | None"] = relationship()
+
+
 class TextBlockHistory(Base):
     """Append-only log of changes to a text block (V2-BE-03)."""
 

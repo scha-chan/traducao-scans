@@ -8,13 +8,15 @@ from arq import Retry
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from agent.orchestrator import build_pipeline, build_translate_only_pipeline
+from agent.orchestrator import Orchestrator, build_pipeline, build_translate_only_pipeline
 from agent.prompt_loader import load_prompt
 from agent.state import BBox, DialogueState, PageAnalysisState
 from app.db.models import (
     BlockSource,
+    LogLevel,
     Page,
     PageStatus,
+    ProcessingLog,
     ProcessingRun,
     RunStatus,
     RunType,
@@ -52,14 +54,29 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
         _, run.prompt_version = load_prompt(settings.prompt_file)
         await db.commit()
 
+        pipeline: Orchestrator = ctx.get("pipeline") or build_pipeline()
+        translate_pipeline: Orchestrator = (
+            ctx.get("translate_pipeline") or build_translate_only_pipeline()
+        )
+
         try:
-            block_count = await _pipeline(db, UUID(page_id), run)
+            block_count = await _pipeline(db, UUID(page_id), run, pipeline, translate_pipeline)
 
             run.status = RunStatus.SUCCESS
             run.finished_at = datetime.now(UTC)
             success_page: Page | None = await db.get(Page, UUID(page_id))
             if success_page is not None:
                 success_page.status = PageStatus.REVIEW
+            db.add(
+                ProcessingLog(
+                    run_id=run.id,
+                    page_id=UUID(page_id),
+                    level=LogLevel.SUCCESS,
+                    stage="pipeline",
+                    message=f"Página processada com sucesso: {block_count} bloco(s) detectado(s)",
+                    details={"block_count": block_count},
+                )
+            )
             await db.commit()
 
             await _publish("done", block_count=block_count)
@@ -71,6 +88,16 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
             run.status = RunStatus.ERROR
             run.finished_at = datetime.now(UTC)
             run.error_message = str(exc)
+            db.add(
+                ProcessingLog(
+                    run_id=run.id,
+                    page_id=UUID(page_id),
+                    level=LogLevel.WARNING,
+                    stage="pipeline",
+                    message=f"Erro transitório (tentativa {attempt}): {exc}",
+                    details={"attempt": attempt, "error": str(exc)},
+                )
+            )
             await db.commit()
             delay = min(2**attempt, 300)
             logger.warning("Transient error attempt %d, retrying in %ds: %s", attempt, delay, exc)
@@ -85,6 +112,20 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
             if error_page is not None:
                 error_page.status = PageStatus.ERROR
                 error_page.error_message = str(exc)
+            db.add(
+                ProcessingLog(
+                    run_id=run.id,
+                    page_id=UUID(page_id),
+                    level=LogLevel.ERROR,
+                    stage="pipeline",
+                    message=f"Erro fatal (tentativa {attempt}): {exc}",
+                    details={
+                        "attempt": attempt,
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+            )
             await db.commit()
             await _publish("error", message=str(exc))
             logger.exception("Fatal error on page %s attempt %d", page_id, attempt)
@@ -95,12 +136,14 @@ class _TransientError(Exception):
     """Transient failure (network, rate-limit, temporary unavailability) — safe to retry."""
 
 
-async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
-    """Run the analysis pipeline via Orchestrator and persist results.
-
-    Stages F3-AG-02 – F3-AG-07 fill dialogues; this scaffold wires the
-    orchestrator call and persists model_metadata (spans + agent_log).
-    """
+async def _pipeline(
+    db: AsyncSession,
+    page_id: UUID,
+    run: ProcessingRun,
+    pipeline: Orchestrator,
+    translate_pipeline: Orchestrator,
+) -> int:
+    """Run the analysis pipeline via Orchestrator and persist results."""
     page: Page | None = await db.get(Page, page_id)
     if page is None:
         raise ValueError(f"Page {page_id} not found")
@@ -112,10 +155,9 @@ async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
             run_id=run.id,
             image_path=page.file_path,
         )
-        orchestrator = build_pipeline()
-        final_state = await orchestrator.run(initial_state)
+        final_state = await pipeline.run(initial_state)
     else:
-        final_state = await _run_translate_only(db, page, run)
+        final_state = await _run_translate_only(db, page, run, translate_pipeline)
 
     run.model_metadata = {
         "spans": [s.to_dict() for s in final_state.spans],
@@ -126,7 +168,7 @@ async def _pipeline(db: AsyncSession, page_id: UUID, run: ProcessingRun) -> int:
 
 
 async def _run_translate_only(
-    db: AsyncSession, page: Page, run: ProcessingRun
+    db: AsyncSession, page: Page, run: ProcessingRun, translate_pipeline: Orchestrator
 ) -> PageAnalysisState:
     """Delete AUTO suggestions, run only TranslationStage, persist new suggestions."""
     blocks_result = await db.execute(select(TextBlock).where(TextBlock.page_id == page.id))
@@ -159,7 +201,7 @@ async def _run_translate_only(
         dialogues=dialogues,
     )
 
-    final_state = await build_translate_only_pipeline().run(initial_state)
+    final_state = await translate_pipeline.run(initial_state)
 
     for dialogue in final_state.dialogues:
         for candidate in dialogue.translations:

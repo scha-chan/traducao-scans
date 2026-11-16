@@ -10,6 +10,8 @@ import { UiProgressComponent } from '../../shared/ui/ui-progress.component';
 
 type AppState = 'selecao' | 'processando' | 'concluido';
 
+type ImageRowStatus = 'pending' | 'processing' | 'done' | 'error';
+
 interface AcceptedFile {
   file: File;
   pageNumber: number;
@@ -18,6 +20,14 @@ interface AcceptedFile {
 interface IgnoredFile {
   name: string;
   reason: string;
+}
+
+interface ImageRow {
+  file: File;
+  pageNumber: number;
+  status: ImageRowStatus;
+  blockCount?: number;
+  errorMsg?: string;
 }
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -44,7 +54,7 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
   standalone: true,
   imports: [FormsModule, UiButtonComponent, UiDropzoneComponent, UiProgressComponent],
   template: `
-    <div class="mx-auto max-w-2xl px-4 py-12">
+    <div class="mx-auto max-w-3xl px-4 py-12">
 
       <!-- SELEÇÃO -->
       @if (appState() === 'selecao') {
@@ -109,22 +119,68 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 
       <!-- PROCESSANDO -->
       @else if (appState() === 'processando') {
-        <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-8">
+        <h1 class="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-6">
           Traduzindo "{{ folderName }}"
         </h1>
 
-        <div class="flex flex-col gap-6">
+        <div class="flex flex-col gap-5">
           <ui-progress [value]="processed()" [max]="total()" [label]="processedLabel()" [sublabel]="timeRemaining()" />
-
-          @if (currentFile()) {
-            <p class="text-sm text-zinc-500 dark:text-zinc-400">Processando: {{ currentFile() }}</p>
-          }
 
           <div class="flex gap-4 text-sm">
             <span class="text-emerald-600 dark:text-emerald-400">✔ {{ successCount() }} concluídas</span>
             @if (errorCountProcessing() > 0) {
               <span class="text-amber-600 dark:text-amber-400">⚠ {{ errorCountProcessing() }} com erro</span>
             }
+          </div>
+
+          <!-- Tabela de status por imagem -->
+          <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+            <div class="max-h-80 overflow-y-auto">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-zinc-50 dark:bg-zinc-800/80 backdrop-blur-sm">
+                  <tr class="text-left text-xs text-zinc-500 dark:text-zinc-400">
+                    <th class="px-3 py-2 font-medium w-10">#</th>
+                    <th class="px-3 py-2 font-medium">Arquivo</th>
+                    <th class="px-3 py-2 font-medium w-32">Status</th>
+                    <th class="px-3 py-2 font-medium text-right w-16">Blocos</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  @for (row of imageRows(); track row.pageNumber) {
+                    <tr [class]="row.status === 'processing' ? 'bg-primary-50/60 dark:bg-primary-900/10' : ''">
+                      <td class="px-3 py-2 text-zinc-400 tabular-nums">{{ row.pageNumber }}</td>
+                      <td class="px-3 py-2 text-zinc-700 dark:text-zinc-300 font-mono text-xs max-w-[200px] truncate" [title]="row.file.name">{{ row.file.name }}</td>
+                      <td class="px-3 py-2">
+                        @if (row.status === 'pending') {
+                          <span class="text-xs text-zinc-400">Aguardando</span>
+                        } @else if (row.status === 'processing') {
+                          <span class="inline-flex items-center gap-1 text-xs text-primary-700 dark:text-primary-300">
+                            <svg class="size-3 animate-spin shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                            Processando
+                          </span>
+                        } @else if (row.status === 'done') {
+                          <span class="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                            <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                            Concluído
+                          </span>
+                        } @else {
+                          <span class="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400" [title]="row.errorMsg">
+                            <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Erro
+                          </span>
+                        }
+                      </td>
+                      <td class="px-3 py-2 text-right text-zinc-500 tabular-nums">
+                        @if (row.status === 'done') { {{ row.blockCount }} }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="flex justify-end">
@@ -155,6 +211,7 @@ export class NewTranslationPage implements OnDestroy {
   readonly errorCountProcessing = signal(0);
   readonly currentFile = signal('');
   readonly timeRemaining = signal('');
+  readonly imageRows = signal<ImageRow[]>([]);
 
   private folderId = '';
   private abortController: AbortController | null = null;
@@ -242,6 +299,7 @@ export class NewTranslationPage implements OnDestroy {
     this.durations = [];
     this.processingStart = Date.now();
     this.abortController = new AbortController();
+    this.imageRows.set(files.map(f => ({ file: f.file, pageNumber: f.pageNumber, status: 'pending' })));
 
     this.processNext(files, 0);
   }
@@ -257,6 +315,9 @@ export class NewTranslationPage implements OnDestroy {
     const item = files[index];
     const start = Date.now();
     this.currentFile.set(item.file.name);
+    this.imageRows.update(rows =>
+      rows.map(r => r.pageNumber === item.pageNumber ? { ...r, status: 'processing' as const } : r)
+    );
 
     try {
       const { page_id } = await new Promise<{ page_id: string }>((resolve, reject) => {
@@ -266,9 +327,10 @@ export class NewTranslationPage implements OnDestroy {
         });
       });
 
+      let blocks = 0;
       if (page_id) {
         const ev = await this.pagesApi.waitForEvent(page_id);
-        const blocks = ev.block_count ?? 0;
+        blocks = ev.block_count ?? 0;
         this.notifications.add(
           `Página ${item.pageNumber} concluída`,
           `${item.file.name} — ${blocks} bloco${blocks !== 1 ? 's' : ''} detectado${blocks !== 1 ? 's' : ''}`,
@@ -276,10 +338,16 @@ export class NewTranslationPage implements OnDestroy {
         );
       }
 
+      this.imageRows.update(rows =>
+        rows.map(r => r.pageNumber === item.pageNumber ? { ...r, status: 'done' as const, blockCount: blocks } : r)
+      );
       this.trackDuration(Date.now() - start);
       this.successCount.update((n) => n + 1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      this.imageRows.update(rows =>
+        rows.map(r => r.pageNumber === item.pageNumber ? { ...r, status: 'error' as const, errorMsg: msg } : r)
+      );
       this.notifications.add(
         `Erro na página ${item.pageNumber}`,
         `${item.file.name} — ${msg}`,

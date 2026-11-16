@@ -42,7 +42,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     on_startup = startup
     on_shutdown = shutdown
-    max_tries = 3
+    max_tries = 1
     job_timeout = 660
     keep_result = 3600
     max_jobs = 1  # modelos ML em CPU — processa um job por vez para evitar OOM

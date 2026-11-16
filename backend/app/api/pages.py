@@ -14,13 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import queue
 from app.api.blocks import BlockOut, _to_block_out
 from app.db.deps import get_db
+from app.db.engine import AsyncSessionLocal
 from app.db.models import (
     BlockSource,
     Page,
@@ -370,6 +371,9 @@ async def analyze_page_async(
     return AnalyzeOut(run_id=run.id)
 
 
+_TERMINAL_STATUSES = {PageStatus.REVIEW, PageStatus.APPROVED, PageStatus.ERROR}
+
+
 @router.get("/{page_id}/events")
 async def page_events(page_id: UUID) -> StreamingResponse:
     """SSE stream that emits one event when the page processing finishes (or errors).
@@ -377,6 +381,11 @@ async def page_events(page_id: UUID) -> StreamingResponse:
     The client should subscribe immediately after enqueuing the job and listen
     for ``{"event": "done", ...}`` or ``{"event": "error", ...}``.
     A ``: keep-alive`` comment is sent every 25 s to prevent proxy timeouts.
+
+    Race-condition guard: after subscribing to Redis (so no future event is
+    missed), we check the page's current status in the DB.  If the worker
+    already finished before this connection was opened, we emit the synthetic
+    event immediately instead of waiting forever.
     """
 
     async def _stream() -> AsyncGenerator[str, None]:
@@ -385,6 +394,40 @@ async def page_events(page_id: UUID) -> StreamingResponse:
         channel = f"page:{page_id}:events"
         await pubsub.subscribe(channel)
         yield 'data: {"event":"connected"}\n\n'
+
+        # Subscribe FIRST, then check DB — this order ensures we never miss an
+        # event: either the worker hasn't published yet (we'll receive it via
+        # pubsub) or it already did (we detect it here and emit synthetically).
+        async with AsyncSessionLocal() as db:
+            page = await db.get(Page, page_id)
+            if page is not None and page.status in _TERMINAL_STATUSES:
+                await pubsub.unsubscribe(channel)
+                await client.aclose()
+                if page.status == PageStatus.ERROR:
+                    payload = json.dumps(
+                        {
+                            "event": "error",
+                            "page_id": str(page_id),
+                            "message": page.error_message or "Erro no processamento",
+                        }
+                    )
+                else:
+                    count_result = await db.execute(
+                        select(func.count())
+                        .select_from(TextBlock)
+                        .where(TextBlock.page_id == page_id)
+                    )
+                    block_count: int = count_result.scalar_one()
+                    payload = json.dumps(
+                        {
+                            "event": "done",
+                            "page_id": str(page_id),
+                            "block_count": block_count,
+                        }
+                    )
+                yield f"data: {payload}\n\n"
+                return
+
         try:
             while True:
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=25.0)

@@ -54,6 +54,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-manga}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-manga_translator}
       REDIS_URL: redis://redis:6379/0
       MANGA_OCR_MODEL: /app/backend/models/manga-ocr
+      TRANSLATION_JA_EN_MODEL: /app/backend/models/opus-mt-ja-en
+      TRANSLATION_EN_PT_MODEL: /app/backend/models/opus-mt-tc-big-en-pt
+      HF_TOKEN: ${HF_TOKEN:-}
     volumes:
       - media_data:/app/backend/uploads
       - ./backend/models:/app/backend/models

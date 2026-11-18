@@ -19,6 +19,11 @@ export const routes: Routes = [
       import('./features/folder-detail/folder-detail.page').then(m => m.FolderDetailPage),
   },
   {
+    path: 'pastas/:folderId/anotar',
+    loadComponent: () =>
+      import('./features/annotation/annotation.page').then(m => m.AnnotationPage),
+  },
+  {
     path: 'obras/:workId/personagens',
     loadComponent: () =>
       import('./features/characters/character-list.page').then(m => m.CharacterListPage),

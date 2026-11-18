@@ -5,7 +5,11 @@ import redis.asyncio as aioredis
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from agent.orchestrator import build_pipeline, build_translate_only_pipeline
+from agent.orchestrator import (
+    build_annotation_pipeline,
+    build_pipeline,
+    build_translate_only_pipeline,
+)
 from app.settings import settings
 from worker.tasks.analysis import analyze_page
 
@@ -24,6 +28,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     logger.info("Loading ML pipeline (OCR + detector + LLM)…")
     ctx["pipeline"] = build_pipeline()
     ctx["translate_pipeline"] = build_translate_only_pipeline()
+    ctx["annotation_pipeline"] = build_annotation_pipeline()
     logger.info("Worker started — ML models loaded")
 
 

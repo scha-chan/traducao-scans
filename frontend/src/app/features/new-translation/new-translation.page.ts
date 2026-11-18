@@ -115,6 +115,7 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
             <!-- Actions -->
             <div class="flex justify-end gap-3 pt-2">
               <ui-button variant="secondary" (click)="cancelSelection()">Cancelar</ui-button>
+              <ui-button variant="secondary" [disabled]="!canStart()" [loading]="uploadingForAnnotation()" (click)="startAnnotation()">Anotar regiões</ui-button>
               <ui-button variant="primary" [disabled]="!canStart()" (click)="startProcessing()">Iniciar tradução</ui-button>
             </div>
           </div>
@@ -225,6 +226,7 @@ export class NewTranslationPage implements OnDestroy {
   readonly timeRemaining = signal('');
   readonly imageRows = signal<ImageRow[]>([]);
 
+  readonly uploadingForAnnotation = signal(false);
   private folderId = '';
   private abortController: AbortController | null = null;
   private durations: number[] = [];
@@ -281,6 +283,32 @@ export class NewTranslationPage implements OnDestroy {
       this.folderName = s;
       this.conflictSuggestion.set(null);
     }
+  }
+
+  startAnnotation() {
+    if (!this.canStart() || this.uploadingForAnnotation()) return;
+    this.conflictSuggestion.set(null);
+    this.uploadingForAnnotation.set(true);
+
+    this.foldersApi.create(this.folderName.trim()).subscribe({
+      next: (folder) => {
+        this.folderId = folder.id;
+        const files = this.accepted().map(a => a.file);
+        this.pagesApi.uploadPages(this.folderId, files).subscribe({
+          next: () => {
+            this.uploadingForAnnotation.set(false);
+            this.router.navigate(['/pastas', this.folderId, 'anotar']);
+          },
+          error: () => this.uploadingForAnnotation.set(false),
+        });
+      },
+      error: (err) => {
+        if (err?.status === 409) {
+          this.conflictSuggestion.set(`${this.folderName.trim()} (2)`);
+        }
+        this.uploadingForAnnotation.set(false);
+      },
+    });
   }
 
   async startProcessing() {

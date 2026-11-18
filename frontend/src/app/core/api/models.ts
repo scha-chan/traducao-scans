@@ -170,3 +170,46 @@ export interface JsonValidationError {
   field: string;
   message: string;
 }
+
+// Annotation (V3-AN)
+export type SliceType = '#' | '$';
+
+export interface AnnotationBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AnnotationRegion {
+  order: number;
+  type: SliceType;
+  bbox: AnnotationBBox;
+}
+
+export interface PageAnnotationIn {
+  page_id: string;
+  regions: AnnotationRegion[];
+}
+
+export interface AnnotateRequest {
+  pages: PageAnnotationIn[];
+}
+
+export interface AnnotateRunOut {
+  run_id: string;
+  page_id?: string;
+}
+
+export interface AnnotateOut {
+  runs: AnnotateRunOut[];
+}
+
+export interface DetectedRegion {
+  bbox: AnnotationBBox;
+  confidence?: number;
+}
+
+export interface DetectOut {
+  regions: DetectedRegion[];
+}

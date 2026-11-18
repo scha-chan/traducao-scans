@@ -738,6 +738,47 @@ async def reorder_blocks(
     return [_block_to_export(b) for b in ordered]
 
 
+class DetectedRegion(BaseModel):
+    bbox: dict[str, int]
+    confidence: float | None = None
+
+
+class DetectOut(BaseModel):
+    regions: list[DetectedRegion]
+
+
+_detection_provider: "Any | None" = None
+
+
+def _get_detection_provider() -> "Any":  # noqa: ANN401
+    """Lazy-load ComicTextDetectorProvider (singleton, shared across requests)."""
+    import os  # noqa: PLC0415
+
+    global _detection_provider  # noqa: PLW0603
+    if _detection_provider is None:
+        from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
+
+        _detection_provider = ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
+    return _detection_provider
+
+
+@router.get("/{page_id}/detect", response_model=DetectOut, tags=["pages"])
+async def detect_regions(page_id: UUID, db: AsyncSession = Depends(get_db)) -> DetectOut:
+    """Return detected text-region bboxes without running the full pipeline (V3-AN-FE-02)."""
+    page = await _get_or_404(page_id, db)
+    try:
+        provider = _get_detection_provider()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Modelo de detecção indisponível: {exc}",
+        ) from exc
+
+    loop = asyncio.get_event_loop()
+    bboxes = await loop.run_in_executor(None, provider.detect, page.file_path)
+    return DetectOut(regions=[DetectedRegion(bbox=b.to_dict()) for b in bboxes])
+
+
 def _block_to_export(block: TextBlock) -> TextBlockExport:
     return TextBlockExport.model_validate(
         {

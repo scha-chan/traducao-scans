@@ -26,6 +26,7 @@ from app.db.models import (
     BlockSource,
     Folder,
     Page,
+    PageSlice,
     PageStatus,
     ProcessingRun,
     RunType,
@@ -527,3 +528,132 @@ async def batch_process_folder(
         failed=failed,
         results=batch_results,
     )
+
+
+# ---------------------------------------------------------------------------
+# Annotation (V3-AN-BE-01)
+# ---------------------------------------------------------------------------
+
+from typing import Literal  # noqa: E402
+
+
+class BBoxIn(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class AnnotationRegion(BaseModel):
+    order: int = Field(..., ge=1)
+    type: Literal["#", "$"]
+    bbox: BBoxIn
+
+
+class PageAnnotationIn(BaseModel):
+    page_id: UUID
+    regions: list[AnnotationRegion] = Field(..., min_length=1)
+
+
+class AnnotateRequest(BaseModel):
+    pages: list[PageAnnotationIn] = Field(..., min_length=1)
+
+
+class AnnotateOut(BaseModel):
+    runs: list[AnalyzeOut]
+
+
+@router.post(
+    "/{folder_id}/annotate",
+    response_model=AnnotateOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def annotate_folder(
+    folder_id: UUID,
+    body: AnnotateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AnnotateOut:
+    """Save manual annotations and enqueue annotation pipeline jobs (V3-AN-BE-01).
+
+    For each page: persists page_slices rows, creates MANUAL TextBlocks with
+    bbox/type/order pre-set, then enqueues an OCR+translation job that skips
+    detection, classification, and reading_order stages.
+    """
+    folder = await _get_or_404(folder_id, db)
+
+    # Validate all page_ids belong to this folder before any writes
+    page_ids = [pa.page_id for pa in body.pages]
+    result = await db.execute(
+        select(Page).where(Page.id.in_(page_ids), Page.folder_id == folder.id)
+    )
+    db_pages = {p.id: p for p in result.scalars().all()}
+    missing = [str(pid) for pid in page_ids if pid not in db_pages]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Páginas não encontradas nesta pasta: {missing}",
+        )
+
+    runs: list[AnalyzeOut] = []
+
+    for pa in body.pages:
+        page = db_pages[pa.page_id]
+
+        # Replace existing slices and MANUAL blocks for this page
+        from sqlalchemy import delete as sql_delete  # noqa: PLC0415
+
+        await db.execute(sql_delete(PageSlice).where(PageSlice.page_id == page.id))
+        await db.execute(
+            sql_delete(TextBlock).where(
+                TextBlock.page_id == page.id, TextBlock.source == BlockSource.MANUAL
+            )
+        )
+        await db.flush()
+
+        for region in pa.regions:
+            block = TextBlock(
+                page_id=page.id,
+                order_number=region.order,
+                type=region.type,
+                bbox=region.bbox.model_dump(),
+                source=BlockSource.MANUAL,
+            )
+            db.add(block)
+            await db.flush()
+
+            db.add(
+                PageSlice(
+                    page_id=page.id,
+                    order_number=region.order,
+                    type=region.type,
+                    bbox_x=region.bbox.x,
+                    bbox_y=region.bbox.y,
+                    bbox_width=region.bbox.width,
+                    bbox_height=region.bbox.height,
+                    text_block_id=block.id,
+                )
+            )
+
+        run = ProcessingRun(
+            page_id=page.id,
+            run_type=RunType.FULL,
+            model_metadata={"annotation_mode": True},
+        )
+        page.status = PageStatus.PROCESSING
+        db.add(run)
+        await db.flush()
+        runs.append(AnalyzeOut(run_id=run.id, page_id=page.id))
+
+    await db.commit()
+
+    pool = await queue.get_pool()
+    for run_out in runs:
+        job = await pool.enqueue_job("analyze_page", str(run_out.page_id), str(run_out.run_id))
+        if job is None:
+            logger.warning(
+                "Failed to enqueue annotation job page_id=%s run_id=%s",
+                run_out.page_id,
+                run_out.run_id,
+            )
+
+    return AnnotateOut(runs=runs)

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { ApproveResponse, AnalyzeResponse, BlockOut, FolderDetail, PageEvent, PageSummary, TextBlockExport, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
+import { ApproveResponse, AnalyzeResponse, BlockOut, DetectOut, FolderDetail, PageEvent, PageSummary, TextBlockExport, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -90,5 +90,18 @@ export class PagesApi extends ApiBase {
 
   getFolder(folderId: string): Observable<FolderDetail> {
     return this.http.get<FolderDetail>(this.url(`/api/folders/${folderId}`));
+  }
+
+  detect(pageId: string): Observable<DetectOut> {
+    return this.http.get<DetectOut>(this.url(`/api/pages/${pageId}/detect`));
+  }
+
+  uploadPages(folderId: string, files: File[]): Observable<{ id: string; file_name: string; page_number: number }[]> {
+    const body = new FormData();
+    files.forEach(f => body.append('files', f));
+    return this.http.post<{ id: string; file_name: string; page_number: number }[]>(
+      this.url(`/api/folders/${folderId}/pages`),
+      body
+    );
   }
 }

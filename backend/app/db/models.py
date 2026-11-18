@@ -151,6 +151,9 @@ class Page(Base):
     text_blocks: Mapped[list["TextBlock"]] = relationship(
         back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
+    slices: Mapped[list["PageSlice"]] = relationship(
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Character(Base):
@@ -400,6 +403,48 @@ class ProcessingLog(Base):
 
     run: Mapped["ProcessingRun | None"] = relationship()
     page: Mapped["Page | None"] = relationship()
+
+
+class PageSlice(Base):
+    """Annotation slice drawn by the user on the annotation canvas (V3-AN)."""
+
+    __tablename__ = "page_slices"
+    __table_args__ = (
+        CheckConstraint("type IN ('#', '$')", name="ck_page_slices_type"),
+        UniqueConstraint(
+            "page_id",
+            "order_number",
+            name="uq_page_slices_page_order",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    page_id: Mapped[UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=False
+    )
+    order_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[str] = mapped_column(String(1), nullable=False)
+    bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_y: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_width: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    text_block_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("text_blocks.id", ondelete="SET NULL"), nullable=True
+    )
+    annotated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    page: Mapped["Page"] = relationship(back_populates="slices")
+    text_block: Mapped["TextBlock | None"] = relationship()
 
 
 class TextBlockHistory(Base):

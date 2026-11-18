@@ -8,16 +8,23 @@ from arq import Retry
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from agent.orchestrator import Orchestrator, build_pipeline, build_translate_only_pipeline
+from agent.orchestrator import (
+    Orchestrator,
+    build_annotation_pipeline,
+    build_pipeline,
+    build_translate_only_pipeline,
+)
 from agent.prompt_loader import load_prompt
 from agent.state import BBox, DialogueState, PageAnalysisState
 from app.db.models import (
     BlockSource,
     LogLevel,
+    Orientation,
     Page,
     PageStatus,
     ProcessingLog,
     ProcessingRun,
+    ReviewStatus,
     RunStatus,
     RunType,
     TextBlock,
@@ -58,11 +65,14 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
         translate_pipeline: Orchestrator = (
             ctx.get("translate_pipeline") or build_translate_only_pipeline()
         )
+        annotation_pipeline: Orchestrator = (
+            ctx.get("annotation_pipeline") or build_annotation_pipeline()
+        )
 
         try:
             t0 = datetime.now(UTC)
             block_count, final_state = await _pipeline(
-                db, UUID(page_id), run, pipeline, translate_pipeline
+                db, UUID(page_id), run, pipeline, translate_pipeline, annotation_pipeline
             )
             processing_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
             tokens_used = sum(s.input_tokens + s.output_tokens for s in final_state.spans)
@@ -156,13 +166,16 @@ async def _pipeline(
     run: ProcessingRun,
     pipeline: Orchestrator,
     translate_pipeline: Orchestrator,
+    annotation_pipeline: Orchestrator,
 ) -> tuple[int, "PageAnalysisState"]:
     """Run the analysis pipeline via Orchestrator and persist results."""
     page: Page | None = await db.get(Page, page_id)
     if page is None:
         raise ValueError(f"Page {page_id} not found")
 
-    if run.run_type == RunType.FULL:
+    annotation_mode: bool = bool((run.model_metadata or {}).get("annotation_mode"))
+
+    if run.run_type == RunType.FULL and not annotation_mode:
         await db.execute(delete(TextBlock).where(TextBlock.page_id == page_id))
         initial_state = PageAnalysisState(
             page_id=page_id,
@@ -170,15 +183,118 @@ async def _pipeline(
             image_path=page.file_path,
         )
         final_state = await pipeline.run(initial_state)
+        await _persist_dialogues(db, page_id, run, final_state)
+    elif annotation_mode:
+        final_state = await _run_annotation(db, page, run, annotation_pipeline)
     else:
         final_state = await _run_translate_only(db, page, run, translate_pipeline)
 
     run.model_metadata = {
+        **(run.model_metadata or {}),
         "spans": [s.to_dict() for s in final_state.spans],
         "agent_log": [e.to_dict() for e in final_state.agent_log],
     }
 
     return len(final_state.dialogues), final_state
+
+
+async def _persist_dialogues(
+    db: AsyncSession,
+    page_id: UUID,
+    run: ProcessingRun,
+    final_state: "PageAnalysisState",
+) -> None:
+    """Create TextBlock + TranslationSuggestion rows from pipeline final_state."""
+    for dialogue in final_state.dialogues:
+        orientation_val = Orientation(dialogue.orientation) if dialogue.orientation else None
+        block = TextBlock(
+            id=UUID(dialogue.id),
+            page_id=page_id,
+            processing_run_id=run.id,
+            order_number=dialogue.order or 0,
+            type=dialogue.type,
+            original=dialogue.original,
+            location=dialogue.location,
+            bbox=dialogue.bbox.to_dict() if dialogue.bbox else None,
+            lines=dialogue.lines or [],
+            orientation=orientation_val,
+            ruby=[{"base": r.base, "reading": r.reading} for r in (dialogue.ruby or [])],
+            handwritten=dialogue.handwritten,
+            ocr_confidence=dialogue.ocr_confidence,
+            source=BlockSource.AUTO,
+            review_status=(
+                ReviewStatus.NEEDS_REVIEW if dialogue.needs_review else ReviewStatus.PENDING
+            ),
+        )
+        db.add(block)
+        await db.flush()
+        for candidate in dialogue.translations:
+            db.add(
+                TranslationSuggestion(
+                    text_block_id=UUID(dialogue.id),
+                    translation=candidate.translation,
+                    observation=candidate.observation,
+                    relevance=candidate.relevance,
+                    source=BlockSource.AUTO,
+                )
+            )
+
+
+async def _run_annotation(
+    db: AsyncSession, page: Page, run: ProcessingRun, annotation_pipeline: Orchestrator
+) -> "PageAnalysisState":
+    """Load MANUAL TextBlocks, run annotation pipeline (OCR+location+translation), update blocks."""
+    blocks_result = await db.execute(
+        select(TextBlock)
+        .where(TextBlock.page_id == page.id, TextBlock.source == BlockSource.MANUAL)
+        .order_by(TextBlock.order_number)
+    )
+    blocks = list(blocks_result.scalars().all())
+
+    dialogues = [
+        DialogueState(
+            id=str(b.id),
+            bbox=BBox.from_dict(b.bbox) if b.bbox else BBox(0, 0, 0, 0),
+            type=b.type,  # type: ignore[arg-type]
+            order=b.order_number,
+        )
+        for b in blocks
+    ]
+
+    initial_state = PageAnalysisState(
+        page_id=page.id,
+        run_id=run.id,
+        image_path=page.file_path,
+        dialogues=dialogues,
+    )
+
+    final_state = await annotation_pipeline.run(initial_state)
+
+    for dialogue in final_state.dialogues:
+        block: TextBlock | None = await db.get(TextBlock, UUID(dialogue.id))
+        if block is None:
+            continue
+        block.original = dialogue.original
+        block.lines = dialogue.lines or []
+        orientation_val = Orientation(dialogue.orientation) if dialogue.orientation else None
+        block.orientation = orientation_val
+        block.ocr_confidence = dialogue.ocr_confidence
+        block.location = dialogue.location
+        block.handwritten = dialogue.handwritten
+        if dialogue.needs_review:
+            block.review_status = ReviewStatus.NEEDS_REVIEW
+        for candidate in dialogue.translations:
+            db.add(
+                TranslationSuggestion(
+                    text_block_id=UUID(dialogue.id),
+                    translation=candidate.translation,
+                    observation=candidate.observation,
+                    relevance=candidate.relevance,
+                    source=BlockSource.AUTO,
+                )
+            )
+
+    return final_state
 
 
 async def _run_translate_only(

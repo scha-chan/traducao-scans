@@ -95,6 +95,8 @@ export interface PageEvent {
   page_id?: string;
   run_id?: string;
   block_count?: number;
+  tokens_used?: number;
+  processing_ms?: number;
   message?: string;
 }
 

@@ -1,4 +1,5 @@
 import { Component, OnDestroy, signal, computed, inject } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { FoldersApi } from '../../core/api/folders.api';
@@ -28,6 +29,8 @@ interface ImageRow {
   pageNumber: number;
   status: ImageRowStatus;
   blockCount?: number;
+  tokensUsed?: number;
+  processingMs?: number;
   errorMsg?: string;
 }
 
@@ -53,7 +56,7 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 @Component({
   selector: 'app-new-translation-page',
   standalone: true,
-  imports: [FormsModule, UiButtonComponent, UiDropzoneComponent, UiProgressComponent],
+  imports: [DecimalPipe, FormsModule, UiButtonComponent, UiDropzoneComponent, UiProgressComponent],
   template: `
     <div class="mx-auto max-w-3xl px-4 py-12">
 
@@ -144,6 +147,8 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
                     <th class="px-3 py-2 font-medium">Arquivo</th>
                     <th class="px-3 py-2 font-medium w-32">Status</th>
                     <th class="px-3 py-2 font-medium text-right w-16">Blocos</th>
+                    <th class="px-3 py-2 font-medium text-right w-20">Tokens</th>
+                    <th class="px-3 py-2 font-medium text-right w-20">Tempo</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -176,6 +181,12 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
                       </td>
                       <td class="px-3 py-2 text-right text-zinc-500 tabular-nums">
                         @if (row.status === 'done') { {{ row.blockCount }} }
+                      </td>
+                      <td class="px-3 py-2 text-right text-zinc-500 tabular-nums text-xs">
+                        @if (row.tokensUsed !== null && row.tokensUsed !== undefined) { {{ row.tokensUsed | number }} }
+                      </td>
+                      <td class="px-3 py-2 text-right text-zinc-500 tabular-nums text-xs">
+                        @if (row.processingMs !== null && row.processingMs !== undefined) { {{ row.processingMs / 1000 | number:'1.1-1' }}s }
                       </td>
                     </tr>
                   }
@@ -329,9 +340,13 @@ export class NewTranslationPage implements OnDestroy {
       });
 
       let blocks = 0;
+      let tokensUsed: number | undefined;
+      let processingMs: number | undefined;
       if (page_id) {
         const ev = await this.pagesApi.waitForEvent(page_id);
         blocks = ev.block_count ?? 0;
+        tokensUsed = ev.tokens_used;
+        processingMs = ev.processing_ms;
         this.notifications.add(
           `Página ${item.pageNumber} concluída`,
           `${item.file.name} — ${blocks} bloco${blocks !== 1 ? 's' : ''} detectado${blocks !== 1 ? 's' : ''}`,
@@ -340,7 +355,9 @@ export class NewTranslationPage implements OnDestroy {
       }
 
       this.imageRows.update(rows =>
-        rows.map(r => r.pageNumber === item.pageNumber ? { ...r, status: 'done' as const, blockCount: blocks } : r)
+        rows.map(r => r.pageNumber === item.pageNumber
+          ? { ...r, status: 'done' as const, blockCount: blocks, tokensUsed, processingMs }
+          : r)
       );
       this.trackDuration(Date.now() - start);
       this.successCount.update((n) => n + 1);

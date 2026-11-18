@@ -60,10 +60,19 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
         )
 
         try:
-            block_count = await _pipeline(db, UUID(page_id), run, pipeline, translate_pipeline)
+            t0 = datetime.now(UTC)
+            block_count, final_state = await _pipeline(
+                db, UUID(page_id), run, pipeline, translate_pipeline
+            )
+            processing_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
+            tokens_used = sum(s.input_tokens + s.output_tokens for s in final_state.spans)
 
             run.status = RunStatus.SUCCESS
             run.finished_at = datetime.now(UTC)
+            if run.model_metadata is None:
+                run.model_metadata = {}
+            run.model_metadata["tokens_used"] = tokens_used
+            run.model_metadata["processing_ms"] = processing_ms
             success_page: Page | None = await db.get(Page, UUID(page_id))
             if success_page is not None:
                 success_page.status = PageStatus.REVIEW
@@ -79,7 +88,12 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
             )
             await db.commit()
 
-            await _publish("done", block_count=block_count)
+            await _publish(
+                "done",
+                block_count=block_count,
+                tokens_used=tokens_used,
+                processing_ms=processing_ms,
+            )
             logger.info("Page %s analysed: %d blocks", page_id, block_count)
             return {"ok": True, "page_id": page_id, "block_count": block_count}
 
@@ -142,7 +156,7 @@ async def _pipeline(
     run: ProcessingRun,
     pipeline: Orchestrator,
     translate_pipeline: Orchestrator,
-) -> int:
+) -> tuple[int, "PageAnalysisState"]:
     """Run the analysis pipeline via Orchestrator and persist results."""
     page: Page | None = await db.get(Page, page_id)
     if page is None:
@@ -164,7 +178,7 @@ async def _pipeline(
         "agent_log": [e.to_dict() for e in final_state.agent_log],
     }
 
-    return len(final_state.dialogues)
+    return len(final_state.dialogues), final_state
 
 
 async def _run_translate_only(

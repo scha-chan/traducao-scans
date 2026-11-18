@@ -22,7 +22,16 @@ from app.api.pages import (
     _dispatch_and_wait,
 )
 from app.db.deps import get_db
-from app.db.models import Folder, Page, PageStatus, ProcessingRun, RunType, TextBlock, Work
+from app.db.models import (
+    BlockSource,
+    Folder,
+    Page,
+    PageStatus,
+    ProcessingRun,
+    RunType,
+    TextBlock,
+    Work,
+)
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -98,6 +107,22 @@ class FolderOut(BaseModel):
         )
 
 
+class PageSummaryOut(BaseModel):
+    id: UUID
+    page_number: int
+    file_name: str
+    status: str
+    block_count: int
+    edited: bool
+    thumbnail_url: str
+    image_url: str
+    error_message: str | None = None
+
+
+class FolderDetailOut(FolderOut):
+    pages: list[PageSummaryOut] = []
+
+
 async def _get_or_404(folder_id: UUID, db: AsyncSession) -> Folder:
     result = await db.execute(
         select(Folder).options(selectinload(Folder.pages)).where(Folder.id == folder_id)
@@ -142,9 +167,35 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
     return FolderOut.from_folder(await _get_or_404(folder.id, db))
 
 
-@router.get("/{folder_id}", response_model=FolderOut)
-async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> FolderOut:
-    return FolderOut.from_folder(await _get_or_404(folder_id, db))
+@router.get("/{folder_id}", response_model=FolderDetailOut)
+async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> FolderDetailOut:
+    result = await db.execute(
+        select(Folder)
+        .options(
+            selectinload(Folder.pages).selectinload(Page.text_blocks),
+        )
+        .where(Folder.id == folder_id)
+    )
+    folder = result.scalar_one_or_none()
+    if folder is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pasta não encontrada")
+
+    base = FolderOut.from_folder(folder)
+    page_summaries = [
+        PageSummaryOut(
+            id=p.id,
+            page_number=p.page_number,
+            file_name=p.file_name,
+            status=p.status.value,
+            block_count=len(p.text_blocks),
+            edited=any(b.source == BlockSource.MANUAL for b in p.text_blocks),
+            thumbnail_url=f"/api/pages/{p.id}/thumbnail",
+            image_url=f"/api/pages/{p.id}/image",
+            error_message=p.error_message,
+        )
+        for p in sorted(folder.pages, key=lambda p: p.page_number)
+    ]
+    return FolderDetailOut(**base.model_dump(), pages=page_summaries)
 
 
 @router.patch("/{folder_id}", response_model=FolderOut)

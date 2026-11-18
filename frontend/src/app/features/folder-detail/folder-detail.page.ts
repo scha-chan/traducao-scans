@@ -75,70 +75,81 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
             <ui-button variant="primary" routerLink="/nova-traducao">Nova tradução</ui-button>
           </ui-empty-state>
         } @else {
-          <!-- Thumbnail grid -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            @for (page of folder()!.pages; track page.id) {
-              @if (page.status === 'PENDING') {
-                <!-- Pending card: not analyzed yet -->
-                <div class="flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
-                  <div class="aspect-[2/3] flex flex-col items-center justify-center gap-3 bg-zinc-100 dark:bg-zinc-900 p-3 text-center">
-                    <svg class="size-8 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                    <p class="text-xs text-zinc-500 dark:text-zinc-400">Não analisada</p>
-                  </div>
-                  <div class="px-2 py-1.5 flex flex-col gap-1">
-                    <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
-                    <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 text-left">
-                      Analisar página
-                    </button>
-                  </div>
-                </div>
-              } @else if (page.status === 'PROCESSING') {
-                <!-- Processing card: analysis in progress -->
-                <div class="flex flex-col rounded-lg overflow-hidden border border-primary-200 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-950/30">
-                  <div class="aspect-[2/3] flex flex-col items-center justify-center gap-3 bg-primary-50 dark:bg-primary-950/50 p-3 text-center">
-                    <svg class="size-8 text-primary-500 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                    <p class="text-xs text-primary-600 dark:text-primary-400">Analisando…</p>
-                  </div>
-                  <div class="px-2 py-1.5 flex flex-col gap-0.5">
-                    <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
-                    <span class="inline-flex items-center gap-1 text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-950 rounded px-1.5 py-0.5 w-fit">
-                      <svg class="size-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                      Processando
-                    </span>
-                  </div>
-                </div>
-              } @else if (page.status === 'ERROR') {
-                <!-- Error card -->
-                <div class="flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
-                  <div class="aspect-[2/3] flex flex-col items-center justify-center gap-2 bg-zinc-100 dark:bg-zinc-900 p-3 text-center">
-                    <svg class="size-8 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    <p class="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2">{{ page.error_message ?? 'Erro ao processar' }}</p>
-                  </div>
-                  <div class="px-2 py-1.5 flex flex-col gap-1">
-                    <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
-                    <button type="button" [disabled]="isRetrying(page.id)" (click)="reprocess(page)" class="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 text-left">
-                      {{ isRetrying(page.id) ? 'Processando…' : 'Tentar novamente' }}
-                    </button>
-                  </div>
-                </div>
-              } @else {
-                <!-- Normal card -->
-                <button type="button" (click)="openPage(page)" class="flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 hover:border-primary-400 dark:hover:border-primary-500 hover:shadow-md transition-all text-left focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-2">
-                  <div class="aspect-[2/3] overflow-hidden bg-zinc-100 dark:bg-zinc-900">
-                    <img [src]="thumbnailUrl(page)" [alt]="'Miniatura da página ' + page.page_number" class="w-full h-full object-cover" loading="lazy" />
-                  </div>
-                  <div class="px-2 py-1.5 flex flex-col gap-0.5">
-                    <div class="flex items-center justify-between">
-                      <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pág. {{ page.page_number }}</p>
-                      @if (page.edited) {
-                        <svg class="size-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Editada manualmente"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <!-- Pages table -->
+          <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-zinc-50 dark:bg-zinc-900">
+                <tr class="text-left text-xs text-zinc-500 dark:text-zinc-400">
+                  <th class="px-4 py-3 font-medium w-12">#</th>
+                  <th class="px-4 py-3 font-medium">Arquivo</th>
+                  <th class="px-4 py-3 font-medium w-36">Status</th>
+                  <th class="px-4 py-3 font-medium w-20 text-right">Blocos</th>
+                  <th class="px-4 py-3 font-medium text-right w-40">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800 bg-white dark:bg-zinc-950">
+                @for (page of folder()!.pages; track page.id) {
+                  <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors group">
+                    <td class="px-4 py-3 tabular-nums text-zinc-400">{{ page.page_number }}</td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <span class="text-zinc-700 dark:text-zinc-300 font-mono text-xs truncate max-w-xs" [title]="page.file_name">{{ page.file_name }}</span>
+                        @if (page.edited) {
+                          <svg class="size-3 shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Editada manualmente"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        }
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      @if (page.status === 'PENDING') {
+                        <span class="text-xs text-zinc-400">Pendente</span>
+                      } @else if (page.status === 'PROCESSING') {
+                        <span class="inline-flex items-center gap-1 text-xs text-primary-700 dark:text-primary-300">
+                          <svg class="size-3 animate-spin shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                          Processando
+                        </span>
+                      } @else if (page.status === 'ERROR') {
+                        <span class="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400" [title]="page.error_message ?? ''">
+                          <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                          Erro
+                        </span>
+                      } @else if (page.status === 'APPROVED') {
+                        <span class="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                          <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                          Aprovada
+                        </span>
+                      } @else {
+                        <span class="inline-flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+                          <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          Em revisão
+                        </span>
                       }
-                    </div>
-                    <p class="text-xs text-zinc-400 dark:text-zinc-500 tabular-nums">{{ page.block_count }} {{ page.block_count === 1 ? 'texto' : 'textos' }}</p>
-                  </div>
-                </button>
-              }
-            }
+                    </td>
+                    <td class="px-4 py-3 text-right tabular-nums text-zinc-500 dark:text-zinc-400">
+                      @if (page.status !== 'PENDING' && page.status !== 'PROCESSING') {
+                        {{ page.block_count }}
+                      }
+                    </td>
+                    <td class="px-4 py-3">
+                      <div class="flex items-center justify-end gap-1">
+                        @if (page.status === 'PENDING') {
+                          <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="rounded px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-950 disabled:opacity-50 transition-colors">
+                            Analisar
+                          </button>
+                        } @else if (page.status === 'ERROR') {
+                          <button type="button" [disabled]="isRetrying(page.id)" (click)="reprocess(page)" class="rounded px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50 transition-colors">
+                            {{ isRetrying(page.id) ? 'Processando…' : 'Tentar novamente' }}
+                          </button>
+                        } @else if (page.status !== 'PROCESSING') {
+                          <button type="button" (click)="openPage(page)" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            Abrir
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
           </div>
         }
       }

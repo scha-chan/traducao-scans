@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { FoldersApi } from '../../core/api/folders.api';
 import { PagesApi } from '../../core/api/pages.api';
 import { NotificationService } from '../../core/notifications/notification.service';
+import { extractErrorMessage } from '../../core/http/extract-error';
 import { UiButtonComponent } from '../../shared/ui/ui-button.component';
 import { UiDropzoneComponent } from '../../shared/ui/ui-dropzone.component';
 import { UiProgressComponent } from '../../shared/ui/ui-progress.component';
@@ -344,7 +345,7 @@ export class NewTranslationPage implements OnDestroy {
       this.trackDuration(Date.now() - start);
       this.successCount.update((n) => n + 1);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      const msg = extractErrorMessage(err);
       this.imageRows.update(rows =>
         rows.map(r => r.pageNumber === item.pageNumber ? { ...r, status: 'error' as const, errorMsg: msg } : r)
       );

@@ -43,6 +43,6 @@ class WorkerSettings:
     on_startup = startup
     on_shutdown = shutdown
     max_tries = 1
-    job_timeout = 660
+    job_timeout = 1800
     keep_result = 3600
     max_jobs = 1  # modelos ML em CPU — processa um job por vez para evitar OOM

@@ -18,6 +18,7 @@ Documento de requisitos para um aplicativo que recebe páginas de mangá em japo
   - [4.1 Separação conceitual: Application API × AI Orchestrator](#41-separação-conceitual-application-api--ai-orchestrator-ai-first)
   - [4.2 Camada de AI Providers](#42-camada-de-ai-providers-ai-first)
 - [5. Fluxo principal](#5-fluxo-principal)
+  - [5.1 Fluxo alternativo: anotação manual de regiões (pré-agente)](#51-fluxo-alternativo-anotação-manual-de-regiões-pré-agente)
 - [6. Regra central de ordem de leitura](#6-regra-central-de-ordem-de-leitura)
 - [7. Regra de classificação do tipo](#7-regra-de-classificação-do-tipo)
 - [8. Regra de localização](#8-regra-de-localização)
@@ -190,6 +191,50 @@ Cada `Provider` expõe `analyze(input) → output` e registra modelo, versão e 
 13. O backend valida e persiste o resultado no banco, e a página vai para `REVIEW`.
 14. O frontend, que acompanha o status por polling, apresenta a página com as falas enumeradas e permite a revisão.
 15. Depois da revisão, o usuário aprova a página (`APPROVED`) e pode gerar ou exportar o JSON final.
+
+### 5.1 Fluxo alternativo: anotação manual de regiões (pré-agente)
+
+Quando o usuário faz upload de uma pasta, pode optar pelo **modo de anotação** em vez de disparar o agente diretamente. Nesse modo o usuário demarca manualmente as fatias de texto de cada imagem antes que o OCR e a tradução ocorram.
+
+**Motivação:** elimina a etapa de detecção automática (a mais propensa a erros e custosa em CPU), garante que o número de ordem de cada fatia reflita a **ordem de leitura desejada** (definida pelo usuário, não inferida por algoritmo), e evita que regiões sem texto consumam tempo de OCR.
+
+**Fluxo passo a passo:**
+
+1. Após o upload da pasta, o sistema apresenta a primeira imagem em tela cheia com uma grade vazia.
+2. O usuário desenha retângulos sobre as regiões de texto (**canvas interativo**, similar ao [image-slicer](https://github.com/cmdaltctr/image-slicer)).
+3. Cada retângulo recebe um número sequencial na **ordem de criação** — este número torna-se o `order_number` do bloco de texto e, portanto, a ordem no TXT exportado.
+4. Para cada fatia criada, o usuário seleciona o tipo:
+   - `#` **Balão de fala** — texto dentro de um balão de diálogo.
+   - `$` **Texto de cenário** — narração, letreiro, onomatopeia fora de balão.
+5. Fatias podem ser reordenadas (arrastar), redimensionadas, renomeadas de tipo ou excluídas antes de confirmar.
+6. O usuário confirma a anotação da imagem atual e avança para a próxima (`→`) ou volta para a anterior (`←`).
+7. Ao concluir todas as imagens da pasta, o usuário clica em **"Processar"**: o frontend envia as fatias (bboxes + tipo + order) junto com cada imagem.
+8. O backend cria os `TextBlock` com `source=MANUAL`, `type` já definido e `order_number` já fixado — e enfileira o job de OCR + tradução.
+9. O agente **pula** as etapas de Detecção (2) e Classificação (4) do pipeline, usando diretamente os blocos pré-definidos.
+10. O resultado é apresentado na tela de revisão com os blocos na ordem definida pelo usuário.
+
+**Regras:**
+- A ordem de criação é a ordem de tradução. O usuário é responsável pela leitura correta (direita → esquerda, painel superior antes de inferior).
+- Regiões sem texto podem ser ignoradas; o usuário simplesmente não desenha uma fatia lá.
+- O modo de anotação é opcional: o usuário pode continuar usando o fluxo automático (seção 5).
+- Se o usuário criar uma fatia depois de processar (tela de revisão), ela entra como bloco manual no fim da sequência (order máximo + 1) e é enviada para OCR de forma avulsa.
+
+**Interface (canvas de anotação):**
+
+| Ação | Interação |
+|---|---|
+| Criar fatia | Clicar e arrastar sobre a imagem |
+| Selecionar fatia | Clicar sobre a fatia |
+| Redimensionar | Arrastar as alças nos cantos |
+| Mover | Arrastar o interior da fatia |
+| Alterar tipo | Tecla `T` ou clique no badge `#`/`$` da fatia |
+| Excluir fatia | Tecla `Delete` ou botão na fatia |
+| Avançar imagem | `→` ou botão "Próxima" (somente se ≥ 1 fatia criada) |
+| Voltar imagem | `←` ou botão "Anterior" |
+| Zoom/pan | Scroll e arrastar fora de fatias |
+| Confirmar tudo | Botão "Processar pasta" (habilitado após anotação de todas as imagens) |
+
+A numeração é exibida dentro de cada fatia. O badge de tipo (`#` em azul, `$` em âmbar) aparece no canto superior esquerdo da fatia.
 
 ## 6. Regra central de ordem de leitura
 
@@ -378,12 +423,13 @@ O banco mantém os dados estruturados. O JSON é uma representação derivada e 
 |---|---|---|
 | `works` *(Revisão R3)* | id, title, created_at, updated_at | 1:N com folders |
 | `folders` | id, **work_id (nullable)**, name, created_at, updated_at | N:1 com works; 1:N com pages |
-| `pages` | id, folder_id, file_name, file_path, **mime_type, width, height, sha256**, page_number, status, created_at, updated_at | N:1 com folders; 1:N com text_blocks |
+| `pages` | id, folder_id, file_name, file_path, **mime_type, width, height, sha256**, page_number, status, created_at, updated_at | N:1 com folders; 1:N com text_blocks; 1:N com page_slices |
 | `text_blocks` | id, page_id, **processing_run_id**, order_number, type, original, location, bbox, **lines, orientation, ruby, handwritten**, ocr_confidence, review_status, **source**, **created_at, updated_at** | N:1 com pages; 1:N com translation_suggestions |
 | `translation_suggestions` | id, text_block_id, translation, observation, relevance, **source**, created_at, **updated_at** | N:1 com text_blocks |
 | `processing_runs` | id, page_id, **run_type**, status, started_at, finished_at, error_message, model_metadata, **prompt_version** | N:1 com pages |
 | `characters` *(MVP)* | id, work_id, name_original, name_preferred, gender, speech_register, notes | N:1 com works |
 | `character_mentions` *(MVP)* | id, character_id, page_id, text_block_id | associa personagem a bloco específico; N:1 com characters e text_blocks |
+| `page_slices` *(V3-AN)* | id, page_id, order_number, type, bbox_x, bbox_y, bbox_width, bbox_height, text_block_id (nullable), annotated_at, created_at, updated_at | N:1 com pages; 0:1 com text_blocks |
 | `glossary_entries` *(V2)* | id, work_id, category, source_term, preferred_translation, notes | N:1 com works |
 | `glossary_occurrences` *(V2)* | id, glossary_entry_id, page_id, text_block_id | N:1 com glossary_entries e pages |
 
@@ -399,6 +445,40 @@ O banco mantém os dados estruturados. O JSON é uma representação derivada e 
 - Constraint única `(page_id, order_number)` em `text_blocks`, *deferrable*, para permitir a renumeração dentro de uma transação.
 
 `bbox` é armazenado como JSONB com `x`, `y`, `width` e `height`, em pixels da imagem original. Ele não aparece no JSON de exportação, mas é necessário para desenhar as regiões no frontend e para auditar a ordem.
+
+**Persistência da imagem original e das anotações (§ 5.1):**
+
+- `pages.file_path` aponta sempre para o arquivo original não modificado. Versões processadas (redimensionadas, aumentadas de contraste etc.) são artefatos temporários e nunca substituem o original.
+- `pages.width` e `pages.height` são preenchidos no momento do upload e são obrigatórios quando a página contém anotações — servem de base para converter coordenadas absolutas ↔ relativas em qualquer cliente futuro.
+
+**Tabela `page_slices` *(V3-AN)*:**
+
+Cada fatia desenhada pelo usuário no anotador é uma linha nesta tabela, vinculada à imagem original. Essa separação garante que a anotação sobreviva a reprocessamentos, exclusões de blocos e mudanças no pipeline.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | UUID PK | Identificador único |
+| `page_id` | UUID FK → pages | Imagem à qual a fatia pertence |
+| `order_number` | int NOT NULL | Ordem de criação pelo usuário = ordem de tradução no TXT |
+| `type` | `#` / `$` NOT NULL | Balão de fala (`#`) ou texto de cenário (`$`) |
+| `bbox_x` | int NOT NULL | Coordenada X do canto superior esquerdo, em pixels da imagem original |
+| `bbox_y` | int NOT NULL | Coordenada Y do canto superior esquerdo, em pixels da imagem original |
+| `bbox_width` | int NOT NULL | Largura da fatia em pixels |
+| `bbox_height` | int NOT NULL | Altura da fatia em pixels |
+| `text_block_id` | UUID FK → text_blocks (nullable) | Preenchido após OCR; `NULL` enquanto o job não rodou ou se a fatia foi descartada |
+| `annotated_at` | timestamptz | Momento em que a fatia foi criada/confirmada pelo usuário |
+| `created_at` / `updated_at` | timestamptz | Auditoria padrão |
+
+Constraint única `(page_id, order_number)`, deferrable, para permitir renumeração dentro de transação.
+
+Casos de uso futuros habilitados por esta tabela:
+- Reabrir o anotador com as fatias exatamente onde o usuário as deixou.
+- Auditar a anotação original mesmo após edições nos `text_blocks`.
+- Exportar em formatos de anotação (COCO, Pascal VOC, YOLO) para treinar modelos.
+- Comparar fatias manuais com bboxes gerados automaticamente por run.
+- Exibir o recorte original de cada fatia na tela de revisão sem depender do `text_blocks.bbox` atual.
+
+`text_blocks.bbox` continua sendo a fonte de verdade das coordenadas **em uso** no pipeline (pode divergir de `page_slices` se o usuário ajustar um bloco depois do OCR). Os dois campos são complementares, não redundantes.
 
 ## 15. Hierarquia de conteúdo
 
@@ -441,24 +521,26 @@ Estrutura lógica: **Obra → Pasta (capítulo) → Páginas → Blocos de texto
 | ➕ DELETE | `/api/translations/{id}` | Remover sugestão (o bloco precisa manter pelo menos uma). |
 | ➕ POST | `/api/pages/{id}/approve` | Mudar `REVIEW → APPROVED`, aplicando a política de baixa confiança. *(L2)* |
 | GET | `/api/pages/{id}/json` | Gerar e retornar o JSON final (`?download=true` define `Content-Disposition`). |
+| ➕ GET | `/api/pages/{id}/detect` *(V3-AN)* | Retornar os bboxes detectados automaticamente (sem iniciar pipeline completo). Usado pelo anotador para sugerir regiões. |
+| ➕ PUT | `/api/pages/{id}/annotation` *(V3-AN)* | Salvar ou atualizar o `annotation_snapshot` da página. Idempotente. |
 
 **Padrão de erro** *(Revisão)*: `{"error": {"code": "STRING_CODE", "message": "texto legível", "details": {...}}}`, com os status HTTP coerentes (400, 404, 409, 413, 415, 422 e 500).
 
 ## 17. Pipeline do agente
 
-| Etapa | Entrada | Saída |
-|---|---|---|
-| 1. Pré-processamento | Imagem | Imagem otimizada para OCR/visão |
-| 2. Detecção | Imagem | Regiões textuais + bounding boxes |
-| 3. OCR | Regiões | Texto japonês + confiança |
-| 4. Classificação | Região + contexto | `#` ou `$` |
-| 5. Localização | Bounding box + imagem | Descrição textual |
-| 6. Ordenação | Bounding boxes | ordem 1..N |
-| 7. Tradução | Original + contexto + personagens + páginas aprovadas anteriores | Sugestões |
-| 8. Verificação de consistência | Sugestões + histórico da obra | Sugestões anotadas; alertas de inconsistência |
-| 9. Guardrails | Objeto completo | Objeto com violações sinalizadas ou bloqueadas |
-| 10. Validação estrutural | Objeto aprovado pelos guardrails | JSON validado pelo schema Pydantic |
-| 11. Persistência | Resultado | Registros no banco |
+| Etapa | Entrada | Saída | Pode ser pulada? |
+|---|---|---|---|
+| 1. Pré-processamento | Imagem | Imagem otimizada para OCR/visão | Não |
+| 2. Detecção | Imagem | Regiões textuais + bounding boxes | **Sim** — se o frontend enviou bboxes via anotação manual (§ 5.1), esta etapa é ignorada e os blocos pré-definidos são usados diretamente. |
+| 3. OCR | Regiões | Texto japonês + confiança | Não |
+| 4. Classificação | Região + contexto | `#` ou `$` | **Sim** — se o tipo já foi definido na anotação manual (§ 5.1). |
+| 5. Localização | Bounding box + imagem | Descrição textual | Não |
+| 6. Ordenação | Bounding boxes | ordem 1..N | **Sim** — se `order_number` já foi fixado na anotação manual, a ordenação automática não sobrescreve. |
+| 7. Tradução | Original + contexto + personagens + páginas aprovadas anteriores | Sugestões | Não |
+| 8. Verificação de consistência | Sugestões + histórico da obra | Sugestões anotadas; alertas de inconsistência | Não |
+| 9. Guardrails | Objeto completo | Objeto com violações sinalizadas ou bloqueadas | Não |
+| 10. Validação estrutural | Objeto aprovado pelos guardrails | JSON validado pelo schema Pydantic | Não |
+| 11. Persistência | Resultado | Registros no banco | Não |
 
 ### 17.1 Contrato interno entre etapas *(Revisão)*
 
@@ -659,6 +741,7 @@ Telas e módulos previstos (visão original):
 |---|---|
 | Pastas | Criar, renomear, abrir, excluir e listar pastas. |
 | Páginas | Upload (arrastar e soltar, vários arquivos), nome do arquivo, status de processamento, página seguinte/anterior. |
+| **Anotador de regiões** | Canvas interativo para desenhar fatias sobre cada imagem da pasta antes do processamento. Ver § 5.1. |
 | Revisão da página | Imagem central com caixas numeradas e painel lateral com original, tipo, localização e traduções. |
 | Editor de tradução | Editar sugestões, adicionar ou remover sugestões, alterar relevância e observação. |
 | Ordenação | Mostrar a ordem aplicada e permitir correção manual. |
@@ -927,6 +1010,7 @@ Como o vermelho é a cor da marca, os estados **sempre** combinam ícone e rótu
 | F6 | Revisão completa, aprovação e exportação | Fluxo ponta a ponta: MVP pronto |
 | V2 | Escala e memória da obra | Lote por capítulo, glossário, versionamento, painéis completos |
 | V3 | Integrações | Exportação para ferramentas de lettering |
+| V3-AN | Anotador de regiões | Canvas pré-agente: fatias manuais com tipo e ordem definidos pelo usuário |
 
 > O contrato JSON e o validador sobem para a F2 (antes em MVP-6) porque são a etapa 10 do pipeline. Desde a F3 toda saída do agente já é validada contra o contrato final, e a tela de revisão pode ser construída e testada com blocos manuais antes de o OCR existir.
 
@@ -1118,6 +1202,17 @@ Como o vermelho é a cor da marca, os estados **sempre** combinam ícone e rótu
 | V3-BE-01 | Exportadores para ferramentas de lettering (formato a definir), incluindo bbox quando necessário. | 3 |
 | V3-BE-02 | Reaproveitamento do glossário entre obras (glossário global + herança). | 30.2 |
 | V3-BE-03 | Webhooks e API pública para automações externas. | — |
+
+### V3-AN — Anotador de regiões (pré-agente)
+
+**Objetivo:** permitir que o usuário demarcque manualmente as fatias de texto de cada imagem antes do OCR, definindo ordem, tipo e bounding boxes, substituindo a detecção automática.
+
+| ID | Descrição | Aceite | Ref |
+|---|---|---|---|
+| V3-AN-BE-01 | Endpoint `POST /api/folders/{id}/annotate` recebe um array de páginas, cada uma com `page_number`, `file_name` e `regions: [{bbox, type, order}]`. Cria os `Page` e `TextBlock` com `source=MANUAL`, `type` e `order_number` já fixados, e enfileira o job pulando Detecção e Classificação. | Envio de 3 páginas com regiões manuais → worker processa sem `DetectionStage` → blocos criados com `order_number` e `type` corretos. | 5.1, 17 |
+| V3-AN-BE-02 | O pipeline do agente verifica se a página tem blocos `source=MANUAL` já criados: se sim, pula `DetectionStage`, `ClassificationStage` e `ReadingOrderStage`; vai direto para OCR → Localização → Tradução. | Log do run mostra etapas puladas; `model_metadata` registra `annotation_mode: true`. | 17 |
+| V3-AN-FE-01 | Tela de anotação: canvas com zoom/pan, desenho de retângulos por drag, numeração automática na ordem de criação, badge de tipo `#`/`$` por fatia, atalhos de teclado (§ 5.1). Navegação entre imagens da pasta com `←`/`→`. | Usuário cria 5 fatias em 2 imagens, altera tipos, reordena e clica "Processar" → jobs enfileirados → jobs concluídos com blocos na ordem correta. | 5.1, 19 |
+| V3-AN-FE-02 | Na tela de anotação, sugestão automática de regiões: o backend retorna os bboxes detectados pelo `ComicTextDetectorProvider` sem iniciar o pipeline completo (`GET /api/pages/{id}/detect`). O usuário pode aceitar, ajustar ou ignorar as sugestões. | Botão "Sugerir regiões" exibe os bboxes detectados como fatias rascunho editáveis. | 5.1, 17 |
 
 ---
 

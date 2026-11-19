@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiBase } from '../http/api-base';
-import { ApproveResponse, AnalyzeResponse, BlockOut, DetectOut, FolderDetail, PageEvent, PageSummary, TextBlockExport, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
+import { ApproveResponse, AnalyzeResponse, BlockOut, DetectOut, FolderDetail, PageEvent, PageSliceOut, PageSummary, TextBlockExport, RunOut, ReorderAutoOut, RegenerateResponse } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class PagesApi extends ApiBase {
@@ -94,6 +94,10 @@ export class PagesApi extends ApiBase {
 
   detect(pageId: string): Observable<DetectOut> {
     return this.http.get<DetectOut>(this.url(`/api/pages/${pageId}/detect`));
+  }
+
+  getSlices(pageId: string): Observable<PageSliceOut[]> {
+    return this.http.get<PageSliceOut[]>(this.url(`/api/pages/${pageId}/slices`));
   }
 
   uploadPages(folderId: string, files: File[]): Observable<{ id: string; file_name: string; page_number: number }[]> {

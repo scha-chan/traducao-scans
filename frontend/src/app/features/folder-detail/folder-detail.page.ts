@@ -132,17 +132,32 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
                     <td class="px-4 py-3">
                       <div class="flex items-center justify-end gap-1">
                         @if (page.status === 'PENDING') {
-                          <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="rounded px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-950 disabled:opacity-50 transition-colors">
-                            Analisar
-                          </button>
+                          @if (page.slice_count === 0) {
+                            <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-colors">
+                              Anotar
+                            </a>
+                          } @else {
+                            <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="rounded px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-950 disabled:opacity-50 transition-colors">
+                              Analisar
+                            </button>
+                            <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                              Fatias
+                            </a>
+                          }
                         } @else if (page.status === 'ERROR') {
                           <button type="button" [disabled]="isRetrying(page.id)" (click)="reprocess(page)" class="rounded px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50 transition-colors">
                             {{ isRetrying(page.id) ? 'Processando…' : 'Tentar novamente' }}
                           </button>
+                          <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            Fatias
+                          </a>
                         } @else if (page.status !== 'PROCESSING') {
                           <button type="button" (click)="openPage(page)" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                             Abrir
                           </button>
+                          <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            Fatias
+                          </a>
                         }
                       </div>
                     </td>
@@ -203,6 +218,8 @@ export class FolderDetailPage implements OnInit, OnDestroy {
   readonly forceAnalyzeDialog = signal(false);
   private pendingForcePageId = signal<string | null>(null);
 
+  folderId = signal('');
+
   readonly activePage = computed<PageSummary | null>(() => {
     const n = this.activePageNumber();
     if (n == null) return null;
@@ -215,6 +232,7 @@ export class FolderDetailPage implements OnInit, OnDestroy {
 
   ngOnInit() {
     const folderId = this.route.snapshot.paramMap.get('folderId')!;
+    this.folderId.set(folderId);
     this.loadFolder(folderId);
 
     this.queryParamSub = this.route.queryParamMap.subscribe((params) => {

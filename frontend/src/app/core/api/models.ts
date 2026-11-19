@@ -58,10 +58,21 @@ export interface PageSummary {
   file_name: string;
   status: PageStatus;
   block_count: number;
+  slice_count: number;
   edited: boolean;
   thumbnail_url: string;
   image_url: string;
   error_message?: string;
+}
+
+export interface PageSliceOut {
+  id: string;
+  order_number: number;
+  type: SliceType;
+  bbox_x: number;
+  bbox_y: number;
+  bbox_width: number;
+  bbox_height: number;
 }
 
 export interface FolderDetail extends FolderSummary {

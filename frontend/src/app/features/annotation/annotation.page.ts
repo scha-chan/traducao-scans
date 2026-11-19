@@ -8,6 +8,8 @@ import {
   computed,
   inject,
 } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FoldersApi } from '../../core/api/folders.api';
 import { PagesApi } from '../../core/api/pages.api';
@@ -298,8 +300,31 @@ export class AnnotationPage implements OnInit {
         const sorted = [...folder.pages].sort((a, b) => a.page_number - b.page_number);
         this.pages.set(sorted);
         if (sorted.length > 0) this.loadingImage.set(true);
+        this._loadExistingSlices(sorted.map(p => p.id));
       },
       error: () => this.router.navigate(['/']),
+    });
+  }
+
+  private _loadExistingSlices(pageIds: string[]): void {
+    if (pageIds.length === 0) return;
+    forkJoin(
+      pageIds.map(id => this.pagesApi.getSlices(id).pipe(catchError(() => of([]))))
+    ).subscribe(results => {
+      const m = new Map<string, Slice[]>();
+      results.forEach((slices, i) => {
+        if (slices.length > 0) {
+          m.set(pageIds[i], slices.map(s => ({
+            id: s.id,
+            order: s.order_number,
+            type: s.type,
+            bbox: { x: s.bbox_x, y: s.bbox_y, width: s.bbox_width, height: s.bbox_height },
+          })));
+          const max = Math.max(...slices.map(s => s.order_number));
+          this.nextOrder.set(Math.max(this.nextOrder(), max + 1));
+        }
+      });
+      this.allSlices.set(m);
     });
   }
 

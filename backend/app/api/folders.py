@@ -114,6 +114,7 @@ class PageSummaryOut(BaseModel):
     file_name: str
     status: str
     block_count: int
+    slice_count: int
     edited: bool
     thumbnail_url: str
     image_url: str
@@ -174,6 +175,7 @@ async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> Fol
         select(Folder)
         .options(
             selectinload(Folder.pages).selectinload(Page.text_blocks),
+            selectinload(Folder.pages).selectinload(Page.slices),
         )
         .where(Folder.id == folder_id)
     )
@@ -189,6 +191,7 @@ async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> Fol
             file_name=p.file_name,
             status=p.status.value,
             block_count=len(p.text_blocks),
+            slice_count=len(p.slices),
             edited=any(b.source == BlockSource.MANUAL for b in p.text_blocks),
             thumbnail_url=f"/api/pages/{p.id}/thumbnail",
             image_url=f"/api/pages/{p.id}/image",

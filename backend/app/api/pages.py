@@ -25,6 +25,7 @@ from app.db.engine import AsyncSessionLocal
 from app.db.models import (
     BlockSource,
     Page,
+    PageSlice,
     PageStatus,
     ProcessingRun,
     ReviewStatus,
@@ -760,6 +761,29 @@ def _get_detection_provider() -> "Any":  # noqa: ANN401
 
         _detection_provider = ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
     return _detection_provider
+
+
+class PageSliceOut(BaseModel):
+    id: UUID
+    order_number: int
+    type: str
+    bbox_x: int
+    bbox_y: int
+    bbox_width: int
+    bbox_height: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{page_id}/slices", response_model=list[PageSliceOut], tags=["pages"])
+async def get_page_slices(page_id: UUID, db: AsyncSession = Depends(get_db)) -> list[PageSliceOut]:
+    """Return all page_slices for a page, ordered by order_number."""
+    page = await _get_or_404(page_id, db)
+    result = await db.execute(
+        select(PageSlice).where(PageSlice.page_id == page.id).order_by(PageSlice.order_number)
+    )
+    rows = list(result.scalars().all())
+    return [PageSliceOut.model_validate(r) for r in rows]
 
 
 @router.get("/{page_id}/detect", response_model=DetectOut, tags=["pages"])

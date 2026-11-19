@@ -18,6 +18,7 @@ from agent.prompt_loader import load_prompt
 from agent.state import BBox, DialogueState, PageAnalysisState
 from app.db.models import (
     BlockSource,
+    Folder,
     LogLevel,
     Orientation,
     Page,
@@ -61,19 +62,9 @@ async def analyze_page(ctx: dict[str, Any], page_id: str, run_id: str) -> dict[s
         _, run.prompt_version = load_prompt(settings.prompt_file)
         await db.commit()
 
-        pipeline: Orchestrator = ctx.get("pipeline") or build_pipeline()
-        translate_pipeline: Orchestrator = (
-            ctx.get("translate_pipeline") or build_translate_only_pipeline()
-        )
-        annotation_pipeline: Orchestrator = (
-            ctx.get("annotation_pipeline") or build_annotation_pipeline()
-        )
-
         try:
             t0 = datetime.now(UTC)
-            block_count, final_state = await _pipeline(
-                db, UUID(page_id), run, pipeline, translate_pipeline, annotation_pipeline
-            )
+            block_count, final_state = await _pipeline(db, UUID(page_id), run, ctx)
             processing_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
             tokens_used = sum(s.input_tokens + s.output_tokens for s in final_state.spans)
 
@@ -160,22 +151,52 @@ class _TransientError(Exception):
     """Transient failure (network, rate-limit, temporary unavailability) — safe to retry."""
 
 
+def _get_pipeline(
+    ctx: dict[str, Any],
+    source_lang: str,
+    target_lang: str,
+    kind: str,
+) -> Orchestrator:
+    """Return a cached pipeline or build and cache a new one."""
+    cache: dict[tuple[str, str, str], Orchestrator] = ctx.setdefault("pipeline_cache", {})
+    key = (source_lang, target_lang, kind)
+    if key not in cache:
+        logger.info(
+            "Building pipeline source_lang=%s target_lang=%s kind=%s",
+            source_lang,
+            target_lang,
+            kind,
+        )
+        if kind == "full":
+            cache[key] = build_pipeline(source_lang=source_lang, target_lang=target_lang)
+        elif kind == "annotation":
+            cache[key] = build_annotation_pipeline(source_lang=source_lang, target_lang=target_lang)
+        else:
+            cache[key] = build_translate_only_pipeline(
+                source_lang=source_lang, target_lang=target_lang
+            )
+    return cache[key]
+
+
 async def _pipeline(
     db: AsyncSession,
     page_id: UUID,
     run: ProcessingRun,
-    pipeline: Orchestrator,
-    translate_pipeline: Orchestrator,
-    annotation_pipeline: Orchestrator,
+    ctx: dict[str, Any],
 ) -> tuple[int, "PageAnalysisState"]:
     """Run the analysis pipeline via Orchestrator and persist results."""
     page: Page | None = await db.get(Page, page_id)
     if page is None:
         raise ValueError(f"Page {page_id} not found")
 
+    folder: Folder | None = await db.get(Folder, page.folder_id)
+    source_lang = folder.source_lang if folder else "ja"
+    target_lang = folder.target_lang if folder else "pt"
+
     annotation_mode: bool = bool((run.model_metadata or {}).get("annotation_mode"))
 
     if run.run_type == RunType.FULL and not annotation_mode:
+        pipeline = _get_pipeline(ctx, source_lang, target_lang, "full")
         await db.execute(delete(TextBlock).where(TextBlock.page_id == page_id))
         initial_state = PageAnalysisState(
             page_id=page_id,
@@ -185,8 +206,10 @@ async def _pipeline(
         final_state = await pipeline.run(initial_state)
         await _persist_dialogues(db, page_id, run, final_state)
     elif annotation_mode:
+        annotation_pipeline = _get_pipeline(ctx, source_lang, target_lang, "annotation")
         final_state = await _run_annotation(db, page, run, annotation_pipeline)
     else:
+        translate_pipeline = _get_pipeline(ctx, source_lang, target_lang, "translate")
         final_state = await _run_translate_only(db, page, run, translate_pipeline)
 
     run.model_metadata = {

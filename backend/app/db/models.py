@@ -95,6 +95,8 @@ class Folder(Base):
         ForeignKey("works.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_lang: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ja")
+    target_lang: Mapped[str] = mapped_column(String(10), nullable=False, server_default="pt")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

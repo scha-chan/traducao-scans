@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, signal, inject, computed } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { Subscription, interval } from 'rxjs';
 import { switchMap, filter, take } from 'rxjs/operators';
 import { FoldersApi } from '../../core/api/folders.api';
@@ -16,7 +17,7 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
 @Component({
   selector: 'app-folder-detail-page',
   standalone: true,
-  imports: [RouterLink, UiButtonComponent, UiSkeletonComponent, UiEmptyStateComponent, UiDialogComponent, PageReviewModalComponent],
+  imports: [RouterLink, FormsModule, UiButtonComponent, UiSkeletonComponent, UiEmptyStateComponent, UiDialogComponent, PageReviewModalComponent],
   template: `
     <div class="mx-auto max-w-7xl px-4 py-8">
 
@@ -56,17 +57,40 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
 
       <!-- Loaded -->
       @else if (folder()) {
-        <!-- Header row: summary + download button -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <p class="text-sm text-zinc-500 dark:text-zinc-400">
-            <span class="tabular-nums font-medium text-zinc-700 dark:text-zinc-300">{{ folder()!.total_pages }} páginas</span>
-            @if (errorCount() > 0) {
-              <span class="ml-2 text-amber-600 dark:text-amber-400">⚠ {{ errorCount() }} com erro</span>
-            }
-          </p>
-          <ui-button variant="secondary" [disabled]="downloading()" (click)="downloadTxtFinal()">
-            @if (downloading()) { ⏳ Gerando… } @else { ⬇ Baixar TXT final }
-          </ui-button>
+        <!-- Header row: summary + language selectors + download button -->
+        <div class="flex flex-col gap-3 mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">
+              <span class="tabular-nums font-medium text-zinc-700 dark:text-zinc-300">{{ folder()!.total_pages }} páginas</span>
+              @if (errorCount() > 0) {
+                <span class="ml-2 text-amber-600 dark:text-amber-400">⚠ {{ errorCount() }} com erro</span>
+              }
+            </p>
+            <ui-button variant="secondary" [disabled]="downloading()" (click)="downloadTxtFinal()">
+              @if (downloading()) { ⏳ Gerando… } @else { ⬇ Baixar TXT final }
+            </ui-button>
+          </div>
+          <!-- Language config -->
+          <div class="flex flex-wrap items-center gap-3 text-sm">
+            <span class="text-zinc-500 dark:text-zinc-400">Tradução:</span>
+            <select [(ngModel)]="editSourceLang" (ngModelChange)="saveLangs()" class="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 ring-primary-500">
+              <option value="ja">Japonês</option>
+              <option value="zh">Chinês</option>
+              <option value="ko">Coreano</option>
+              <option value="en">Inglês</option>
+              <option value="es">Espanhol</option>
+              <option value="pt">Português</option>
+            </select>
+            <span class="text-zinc-400">→</span>
+            <select [(ngModel)]="editTargetLang" (ngModelChange)="saveLangs()" class="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 ring-primary-500">
+              <option value="pt">Português</option>
+              <option value="en">Inglês</option>
+              <option value="es">Espanhol</option>
+              <option value="ja">Japonês</option>
+              <option value="zh">Chinês</option>
+              <option value="ko">Coreano</option>
+            </select>
+          </div>
         </div>
 
         <!-- Empty state (no pages) -->
@@ -210,6 +234,9 @@ export class FolderDetailPage implements OnInit, OnDestroy {
   readonly error = signal<string | null>(null);
   readonly downloading = signal(false);
 
+  editSourceLang = 'ja';
+  editTargetLang = 'pt';
+
   private readonly retryingIds = signal<string[]>([]);
   private readonly analyzingIds = signal<string[]>([]);
   private readonly pollingSubscriptions = new Map<string, Subscription>();
@@ -253,6 +280,8 @@ export class FolderDetailPage implements OnInit, OnDestroy {
     this.foldersApi.get(folderId).subscribe({
       next: (f) => {
         this.folder.set(f);
+        this.editSourceLang = f.source_lang ?? 'ja';
+        this.editTargetLang = f.target_lang ?? 'pt';
         this.loading.set(false);
       },
       error: () => {
@@ -440,6 +469,16 @@ export class FolderDetailPage implements OnInit, OnDestroy {
       },
       error: () => {
         this.downloading.set(false);
+      },
+    });
+  }
+
+  saveLangs() {
+    const f = this.folder();
+    if (!f) return;
+    this.foldersApi.updateLangs(f.id, this.editSourceLang, this.editTargetLang).subscribe({
+      next: (updated) => {
+        this.folder.set({ ...f, source_lang: updated.source_lang, target_lang: updated.target_lang });
       },
     });
   }

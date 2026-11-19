@@ -26,9 +26,11 @@ async def startup(ctx: dict[str, Any]) -> None:
     ctx["redis"] = aioredis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]
 
     logger.info("Loading ML pipeline (OCR + detector + LLM)…")
-    ctx["pipeline"] = build_pipeline()
-    ctx["translate_pipeline"] = build_translate_only_pipeline()
-    ctx["annotation_pipeline"] = build_annotation_pipeline()
+    cache: dict[tuple[str, str, str], object] = {}
+    cache[("ja", "pt", "full")] = build_pipeline()
+    cache[("ja", "pt", "translate")] = build_translate_only_pipeline()
+    cache[("ja", "pt", "annotation")] = build_annotation_pipeline()
+    ctx["pipeline_cache"] = cache
     logger.info("Worker started — ML models loaded")
 
 

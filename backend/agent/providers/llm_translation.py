@@ -32,6 +32,15 @@ _DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 _MAX_COST_PER_PAGE_USD: float = float(os.environ.get("MAX_COST_PER_PAGE_USD") or "0.05")
 _DEFAULT_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 
+_LANG_NAMES: dict[str, str] = {
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "ko": "Korean",
+    "en": "English",
+    "es": "Spanish",
+    "pt": "Brazilian Portuguese",
+}
+
 
 # ---------------------------------------------------------------------------
 # Pydantic models for LLM structured output
@@ -84,6 +93,8 @@ class ClaudeTranslationProvider:
         prompts_dir: str | Path | None = None,
         max_retries: int = 2,
         cache: TranslationCache | None = None,
+        source_lang: str = "ja",
+        target_lang: str = "pt",
         # Legacy alias kept for backward compatibility
         model: str | None = None,
     ) -> None:
@@ -103,6 +114,8 @@ class ClaudeTranslationProvider:
         self._prompts_dir = Path(prompts_dir) if prompts_dir is not None else _DEFAULT_PROMPTS_DIR
         self._max_retries = max_retries
         self._cache = cache
+        self._source_lang = source_lang
+        self._target_lang = target_lang
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -113,7 +126,12 @@ class ClaudeTranslationProvider:
         if not prompt_path.exists():
             logger.warning("Prompt version %s not found, falling back to v1", prompt_version)
             prompt_path = self._prompts_dir / "translate_page.v1.txt"
-        return prompt_path.read_text(encoding="utf-8")
+        base = prompt_path.read_text(encoding="utf-8")
+        if self._source_lang != "ja" or self._target_lang != "pt":
+            src_name = _LANG_NAMES.get(self._source_lang, self._source_lang)
+            tgt_name = _LANG_NAMES.get(self._target_lang, self._target_lang)
+            base += f"\n\nIMPORTANT: Translate from {src_name} to {tgt_name}."
+        return base
 
     def _build_user_message(self, dialogue: DialogueState) -> str:
         payload: dict[str, Any] = {  # noqa: ANN401
@@ -396,6 +414,8 @@ class OllamaTranslationProvider:
         prompts_dir: str | Path | None = None,
         max_retries: int = 2,
         cache: TranslationCache | None = None,
+        source_lang: str = "ja",
+        target_lang: str = "pt",
     ) -> None:
         self._base_url: str = (
             base_url or os.environ.get("OLLAMA_BASE_URL") or _DEFAULT_OLLAMA_BASE_URL
@@ -406,13 +426,20 @@ class OllamaTranslationProvider:
         self._prompts_dir = Path(prompts_dir) if prompts_dir is not None else _DEFAULT_PROMPTS_DIR
         self._max_retries = max_retries
         self._cache = cache
+        self._source_lang = source_lang
+        self._target_lang = target_lang
 
     def _load_system_prompt(self, prompt_version: str) -> str:
         prompt_path = self._prompts_dir / f"translate_page.{prompt_version}.txt"
         if not prompt_path.exists():
             logger.warning("Prompt version %s not found, falling back to v1", prompt_version)
             prompt_path = self._prompts_dir / "translate_page.v1.txt"
-        return prompt_path.read_text(encoding="utf-8")
+        base = prompt_path.read_text(encoding="utf-8")
+        if self._source_lang != "ja" or self._target_lang != "pt":
+            src_name = _LANG_NAMES.get(self._source_lang, self._source_lang)
+            tgt_name = _LANG_NAMES.get(self._target_lang, self._target_lang)
+            base += f"\n\nIMPORTANT: Translate from {src_name} to {tgt_name}."
+        return base
 
     def _build_user_message(self, dialogue: DialogueState) -> str:
         payload: dict[str, Any] = {  # noqa: ANN401

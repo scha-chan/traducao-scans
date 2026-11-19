@@ -56,12 +56,16 @@ _PIL_TO_MIME = {
 class FolderCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=120, alias="name")
     work_id: UUID | None = None
+    source_lang: str = "ja"
+    target_lang: str = "pt"
 
     model_config = {"populate_by_name": True}
 
 
 class FolderUpdate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=120)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    source_lang: str | None = None
+    target_lang: str | None = None
 
 
 def _folder_status(pages: list["Page"]) -> str:
@@ -87,6 +91,8 @@ class FolderOut(BaseModel):
     total_pages: int = 0
     processed_pages: int = 0
     error_pages: int = 0
+    source_lang: str = "ja"
+    target_lang: str = "pt"
 
     model_config = {"from_attributes": True}
 
@@ -105,6 +111,8 @@ class FolderOut(BaseModel):
             total_pages=len(pages),
             processed_pages=processed,
             error_pages=errors,
+            source_lang=folder.source_lang,
+            target_lang=folder.target_lang,
         )
 
 
@@ -156,7 +164,9 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
         db.add(default_work)
         await db.flush()
         work_id = default_work.id
-    folder = Folder(name=body.title, work_id=work_id)
+    folder = Folder(
+        name=body.title, work_id=work_id, source_lang=body.source_lang, target_lang=body.target_lang
+    )
     db.add(folder)
     try:
         await db.commit()
@@ -207,7 +217,12 @@ async def update_folder(
     folder_id: UUID, body: FolderUpdate, db: AsyncSession = Depends(get_db)
 ) -> FolderOut:
     folder = await _get_or_404(folder_id, db)
-    folder.name = body.name
+    if body.name is not None:
+        folder.name = body.name
+    if body.source_lang is not None:
+        folder.source_lang = body.source_lang
+    if body.target_lang is not None:
+        folder.target_lang = body.target_lang
     try:
         await db.commit()
     except Exception:

@@ -112,6 +112,32 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
               </ul>
             </div>
 
+            <!-- Language selectors -->
+            <div class="flex gap-4">
+              <div class="flex flex-col gap-1.5 flex-1">
+                <label for="source-lang" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Idioma de origem</label>
+                <select id="source-lang" [(ngModel)]="sourceLang" class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 ring-primary-500">
+                  <option value="ja">Japonês</option>
+                  <option value="zh">Chinês</option>
+                  <option value="ko">Coreano</option>
+                  <option value="en">Inglês</option>
+                  <option value="es">Espanhol</option>
+                  <option value="pt">Português</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1.5 flex-1">
+                <label for="target-lang" class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Idioma de destino</label>
+                <select id="target-lang" [(ngModel)]="targetLang" class="rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 ring-primary-500">
+                  <option value="pt">Português</option>
+                  <option value="en">Inglês</option>
+                  <option value="es">Espanhol</option>
+                  <option value="ja">Japonês</option>
+                  <option value="zh">Chinês</option>
+                  <option value="ko">Coreano</option>
+                </select>
+              </div>
+            </div>
+
             <!-- Actions -->
             <div class="flex justify-end gap-3 pt-2">
               <ui-button variant="secondary" (click)="cancelSelection()">Cancelar</ui-button>
@@ -226,6 +252,9 @@ export class NewTranslationPage implements OnDestroy {
   readonly timeRemaining = signal('');
   readonly imageRows = signal<ImageRow[]>([]);
 
+  sourceLang = 'ja';
+  targetLang = 'pt';
+
   readonly uploadingForAnnotation = signal(false);
   private folderId = '';
   private abortController: AbortController | null = null;
@@ -290,7 +319,7 @@ export class NewTranslationPage implements OnDestroy {
     this.conflictSuggestion.set(null);
     this.uploadingForAnnotation.set(true);
 
-    this.foldersApi.create(this.folderName.trim()).subscribe({
+    this.foldersApi.create(this.folderName.trim(), this.sourceLang, this.targetLang).subscribe({
       next: (folder) => {
         this.folderId = folder.id;
         const files = this.accepted().map(a => a.file);
@@ -315,7 +344,7 @@ export class NewTranslationPage implements OnDestroy {
     if (!this.canStart()) return;
     this.conflictSuggestion.set(null);
 
-    this.foldersApi.create(this.folderName.trim()).subscribe({
+    this.foldersApi.create(this.folderName.trim(), this.sourceLang, this.targetLang).subscribe({
       next: (folder) => {
         this.folderId = folder.id;
         this.runUploadLoop(this.accepted());

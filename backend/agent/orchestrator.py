@@ -39,23 +39,18 @@ class Orchestrator:
         return state
 
 
-def build_translate_only_pipeline() -> Orchestrator:
+def build_translate_only_pipeline(source_lang: str = "ja", target_lang: str = "pt") -> Orchestrator:
     """Construct a translate-only pipeline (skips detection and OCR stages)."""
-    import os  # noqa: PLC0415
-
     from agent.providers.translation import MarianTranslationProvider  # noqa: PLC0415
     from agent.stages.translation import TranslationStage  # noqa: PLC0415
 
     translation = TranslationStage(
-        provider=MarianTranslationProvider(
-            ja_en_model=os.environ.get("TRANSLATION_JA_EN_MODEL"),
-            en_pt_model=os.environ.get("TRANSLATION_EN_PT_MODEL"),
-        )
+        provider=MarianTranslationProvider(source_lang=source_lang, target_lang=target_lang)
     )
     return Orchestrator(stages=[translation])
 
 
-def build_annotation_pipeline() -> Orchestrator:
+def build_annotation_pipeline(source_lang: str = "ja", target_lang: str = "pt") -> Orchestrator:
     """Annotation pipeline: starts from pre-defined regions, skips detection/classification."""
     import os  # noqa: PLC0415
 
@@ -87,12 +82,16 @@ def build_annotation_pipeline() -> Orchestrator:
         from agent.providers.llm_translation import OllamaTranslationProvider  # noqa: PLC0415
 
         llm_translation_provider: ClaudeTranslationProvider | OllamaTranslationProvider = (
-            OllamaTranslationProvider(cache=translation_cache)
+            OllamaTranslationProvider(
+                cache=translation_cache, source_lang=source_lang, target_lang=target_lang
+            )
         )
     else:
         llm_translation_provider = ClaudeTranslationProvider(
             cache=translation_cache,
             fallback_model=os.environ.get("ANTHROPIC_TRANSLATION_FALLBACK_MODEL"),
+            source_lang=source_lang,
+            target_lang=target_lang,
         )
     translation = TranslationStage(provider=llm_translation_provider)
     return Orchestrator(
@@ -110,7 +109,7 @@ def build_annotation_pipeline() -> Orchestrator:
     )
 
 
-def build_pipeline() -> Orchestrator:
+def build_pipeline(source_lang: str = "ja", target_lang: str = "pt") -> Orchestrator:
     """Construct the default full-analysis pipeline."""
     import os  # noqa: PLC0415
 
@@ -152,7 +151,9 @@ def build_pipeline() -> Orchestrator:
         from agent.providers.llm_translation import OllamaTranslationProvider  # noqa: PLC0415
 
         llm_translation_provider: ClaudeTranslationProvider | OllamaTranslationProvider = (
-            OllamaTranslationProvider(cache=translation_cache)
+            OllamaTranslationProvider(
+                cache=translation_cache, source_lang=source_lang, target_lang=target_lang
+            )
         )
         logger.info(
             "llm_provider=ollama model=%s", os.environ.get("OLLAMA_TRANSLATION_MODEL") or "llama3.1"
@@ -161,6 +162,8 @@ def build_pipeline() -> Orchestrator:
         llm_translation_provider = ClaudeTranslationProvider(
             cache=translation_cache,
             fallback_model=os.environ.get("ANTHROPIC_TRANSLATION_FALLBACK_MODEL"),
+            source_lang=source_lang,
+            target_lang=target_lang,
         )
         logger.info("llm_provider=claude")
     translation = TranslationStage(provider=llm_translation_provider)

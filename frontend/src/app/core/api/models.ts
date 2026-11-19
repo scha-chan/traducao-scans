@@ -50,6 +50,8 @@ export interface FolderSummary {
   processed_pages: number;
   error_pages: number;
   updated_at: string;
+  source_lang: string;
+  target_lang: string;
 }
 
 export interface PageSummary {

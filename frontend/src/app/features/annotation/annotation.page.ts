@@ -89,14 +89,14 @@ const MIN_SLICE_PX = 10;
           <div class="tip">
             <kbd>T</kbd> alterna tipo · <kbd>Del</kbd> exclui · <kbd>←/→</kbd> navega
           </div>
-          <app-ui-button
+          <ui-button
             variant="primary"
             [disabled]="!canProcess()"
             [loading]="processing()"
             (click)="processAll()"
           >
             @if (processing()) { Enviando… } @else { Processar pasta }
-          </app-ui-button>
+          </ui-button>
           @if (!allPagesAnnotated()) {
             <p class="warn">Anote pelo menos 1 fatia em cada imagem para processar</p>
           }

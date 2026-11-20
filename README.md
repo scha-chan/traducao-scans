@@ -1,38 +1,67 @@
-# Manga Translator Agent
+# Manga Translator
 
-Ferramenta para tradução de mangás japoneses via IA: detecta regiões de texto, faz OCR, classifica e traduz os balões.
+Aplicação de tradução de mangás com OCR, pipeline de IA e editor de traduções.
 
-## Estrutura do repositório
+## Stack
 
+| Camada    | Tecnologia                              |
+|-----------|-----------------------------------------|
+| Frontend  | Angular 22 (standalone, signals)        |
+| Backend   | FastAPI + SQLAlchemy async + Alembic    |
+| Worker    | ARQ (Redis queue) + MarianMT / Claude   |
+| Banco     | PostgreSQL 16                           |
+| Cache     | Redis 7                                 |
+
+---
+
+## Deploy com Docker Compose
+
+### 1. Variáveis de ambiente
+
+Crie um `.env` na raiz do projeto:
+
+```env
+POSTGRES_PASSWORD=senha_segura
+ANTHROPIC_API_KEY=sk-ant-...   # opcional, apenas se usar Claude
 ```
-traducao-scans/
-├── frontend/      # Angular — interface de revisão e download
-├── backend/       # FastAPI — API REST e orquestrador do pipeline
-├── contracts/     # Schemas JSON e contratos compartilhados entre frontend e backend
-├── prompts/       # Prompts de IA versionados (OCR, tradução, classificação)
-└── docs/          # PRD, especificação do frontend e referências
+
+Variáveis opcionais com seus defaults:
+
+```env
+POSTGRES_DB=manga_translator
+POSTGRES_USER=manga
+BACKEND_PORT=8000
+FRONTEND_PORT=4200
+API_BASE_URL=http://localhost:8000
 ```
 
-## Pré-requisitos
-
-| Ferramenta | Versão mínima |
-|---|---|
-| Docker + Docker Compose | 24 |
-| Node.js | 22 |
-| Python | 3.12 |
-
-## Subir o ambiente completo
+### 2. Subir os serviços
 
 ```bash
-cp .env.example .env        # preencha as variáveis obrigatórias
-docker compose up --build   # sobe PostgreSQL, Redis, backend e frontend
+docker compose up -d
 ```
 
-Após o build:
+### 3. Aplicar as migrations do banco
+
+**Obrigatório na primeira execução e após cada atualização que adicione migrations.**
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Para verificar a versão atual:
+
+```bash
+docker compose exec backend alembic current
+```
+
+### 4. Acessar
 
 - Frontend: <http://localhost:4200>
 - API: <http://localhost:8000>
-- Health check: `GET http://localhost:8000/health` → `200 {"status":"ok"}`
+- Swagger: <http://localhost:8000/docs>
+
+---
 
 ## Desenvolvimento local (sem Docker)
 
@@ -40,11 +69,16 @@ Após o build:
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload
+```
+
+### Worker
+
+```bash
+cd backend
+arq worker.main.WorkerSettings
 ```
 
 ### Frontend
@@ -52,59 +86,30 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm install
-npm run start               # abre em http://localhost:4200
+ng serve
 ```
 
-## Testes e qualidade
+---
 
-```bash
-# Backend
-cd backend
-ruff check .
-mypy .
-pytest
+## Migrations
 
-# Frontend
-cd frontend
-npx eslint .
-npx tsc --noEmit
-ng test --watch=false
-```
+As migrations ficam em `backend/alembic/versions/`. Cada atualização do projeto pode incluir novas migrations; sempre rode `alembic upgrade head` após um `git pull`.
 
-O CI (ver `.github/workflows/`) executa todos os checks acima em cada push e bloqueia merges com falha.
+| Número | Descrição                            |
+|--------|--------------------------------------|
+| 0001   | Schema inicial                       |
+| 0007   | Tabela page_slices                   |
+| 0008   | Colunas source_lang / target_lang    |
 
-## Pre-commit hooks
+---
 
-O repositório usa [pre-commit](https://pre-commit.com) para barrar erros antes do commit:
+## Variáveis de ambiente do worker (modelos ML)
 
-| Hook | O que verifica |
-|---|---|
-| `ruff lint` | Erros de lint no backend (com auto-fix) |
-| `ruff format` | Formatação do backend |
-| `mypy` | Tipagem estrita do backend |
-| `eslint` | Lint do frontend |
-| `tsc` | Tipagem do frontend |
-
-### Configurar após clonar
-
-```bash
-# 1. Instale as dependências de dev do backend (inclui o pre-commit)
-cd backend
-pip install -r requirements-dev.txt
-cd ..
-
-# 2. Registre os hooks no git local
-pre-commit install
-```
-
-A partir daí, cada `git commit` roda os hooks automaticamente.
-Para rodar manualmente em todos os arquivos:
-
-```bash
-pre-commit run --all-files
-```
-
-## Documentação
-
-- [PRD](docs/PRD_Agente_Traducao_Manga_Japones.md) — visão de produto, fases e roadmap
-- [Especificação do Frontend](docs/FRONTEND_Especificacao.md) — wireframes, rotas e cards de entrega
+| Variável                   | Default (Docker)                            |
+|----------------------------|---------------------------------------------|
+| `MANGA_OCR_MODEL`          | `/app/backend/models/manga-ocr`             |
+| `TRANSLATION_JA_EN_MODEL`  | `/app/backend/models/opus-mt-ja-en`         |
+| `TRANSLATION_EN_PT_MODEL`  | `/app/backend/models/opus-mt-tc-big-en-pt`  |
+| `LLM_PROVIDER`             | `claude` (ou `ollama` se `OLLAMA_BASE_URL`) |
+| `ANTHROPIC_API_KEY`        | —                                           |
+| `OLLAMA_BASE_URL`          | `http://localhost:11434`                    |

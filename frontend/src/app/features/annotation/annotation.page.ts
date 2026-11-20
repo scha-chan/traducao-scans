@@ -48,6 +48,9 @@ const MIN_SLICE_PX = 10;
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-header">
+          <a class="back-link" (click)="goBack()" (keyup.enter)="goBack()" tabindex="0" role="button" aria-label="Voltar à listagem">
+            ← Voltar
+          </a>
           <h2 class="sidebar-title">Anotador de regiões</h2>
           <p class="sidebar-sub">
             Imagem {{ currentIndex() + 1 }} de {{ pages().length }}
@@ -174,6 +177,8 @@ const MIN_SLICE_PX = 10;
       overflow: hidden;
     }
 
+    .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3, #888); cursor: pointer; text-decoration: none; margin-bottom: 6px; }
+    .back-link:hover { color: var(--text-1, #eee); }
     .sidebar-title { font-size: 14px; font-weight: 600; margin: 0; }
     .sidebar-sub { font-size: 12px; color: var(--text-3, #888); margin: 0; }
 
@@ -804,5 +809,9 @@ export class AnnotationPage implements OnInit {
         this.processing.set(false);
       },
     });
+  }
+
+  goBack(): void {
+    this.router.navigate(['/pastas', this.folderId]);
   }
 }

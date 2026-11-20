@@ -1,0 +1,15 @@
+# Desenvolvimento: sobrescreve o docker-compose.yml para hot-reload sem rebuild.
+# Usado automaticamente pelo `docker compose` quando presente.
+services:
+  backend:
+    volumes:
+      - media_data:/app/backend/uploads
+      - ./backend/models:/app/backend/models
+      - ./backend:/app/backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    volumes:
+      - media_data:/app/backend/uploads
+      - ./backend/models:/app/backend/models
+      - ./backend:/app/backend

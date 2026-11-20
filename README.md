@@ -63,6 +63,25 @@ docker compose exec backend alembic current
 
 ---
 
+## Desenvolvimento com Docker (hot-reload)
+
+O arquivo `docker-compose.override.yml` já está no repositório. Quando presente, o Docker Compose o usa automaticamente — sem nenhuma flag extra.
+
+Ele monta `./backend` como volume dentro do container e liga o `--reload` do uvicorn, então qualquer alteração em arquivos `.py` reinicia o servidor em segundos, sem rebuild.
+
+```bash
+# Primeira vez (ou após trocar a imagem base):
+docker compose up -d --build
+
+# A partir daí, mudanças no código Python refletem automaticamente.
+# Para reiniciar o worker manualmente após mudanças:
+docker compose restart worker
+```
+
+> **Frontend:** o container do frontend é uma imagem Nginx estática (precisa rebuild após mudanças). Para desenvolvimento do frontend, prefira rodar `ng serve` localmente apontando para o backend Docker (`API_BASE_URL=http://localhost:8000`).
+
+---
+
 ## Desenvolvimento local (sem Docker)
 
 ### Backend

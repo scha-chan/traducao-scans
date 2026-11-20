@@ -281,7 +281,7 @@ export class AnnotationPage implements OnInit {
   currentPage = computed(() => this.pages()[this.currentIndex()] ?? null);
   currentImageUrl = computed(() => {
     const p = this.currentPage();
-    return p ? `/api/pages/${p.id}/image` : '';
+    return p ? this.pagesApi.imageUrl(p) : '';
   });
   currentSlices = computed(() => {
     const p = this.currentPage();
@@ -300,17 +300,19 @@ export class AnnotationPage implements OnInit {
         const sorted = [...folder.pages].sort((a, b) => a.page_number - b.page_number);
         this.pages.set(sorted);
         if (sorted.length > 0) this.loadingImage.set(true);
-        this._loadExistingSlices(sorted.map(p => p.id));
+        this._loadExistingSlices(sorted);
       },
       error: () => this.router.navigate(['/']),
     });
   }
 
-  private _loadExistingSlices(pageIds: string[]): void {
-    if (pageIds.length === 0) return;
+  private _loadExistingSlices(pages: PageSummary[]): void {
+    const withSlices = pages.filter(p => p.slice_count > 0);
+    if (withSlices.length === 0) return;
     forkJoin(
-      pageIds.map(id => this.pagesApi.getSlices(id).pipe(catchError(() => of([]))))
+      withSlices.map(p => this.pagesApi.getSlices(p.id).pipe(catchError(() => of([]))))
     ).subscribe(results => {
+      const pageIds = withSlices.map(p => p.id);
       const m = new Map<string, Slice[]>();
       results.forEach((slices, i) => {
         if (slices.length > 0) {

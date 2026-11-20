@@ -63,16 +63,29 @@ const MIN_SLICE_PX = 10;
             (click)="nextPage()"
             title="Próxima (→)"
           >›</button>
+          <button
+            class="nav-btn remove-page-btn"
+            [disabled]="pages().length <= 1"
+            (click)="removePage(currentIndex())"
+            title="Remover esta imagem da anotação"
+          >🗑</button>
         </div>
 
         <div class="slices-list">
-          @for (s of currentSlices(); track s.id) {
+          @for (s of currentSlices(); track s.id; let i = $index) {
             <div
               class="slice-item"
               [class.selected]="selectedId() === s.id"
+              [class.dragging]="dragSliceSourceIdx() === i"
+              [class.drag-over]="dragSliceOverIdx() === i && dragSliceSourceIdx() !== i"
+              draggable="true"
               tabindex="0"
               (click)="selectSlice(s.id)"
               (keyup.enter)="selectSlice(s.id)"
+              (dragstart)="onSliceDragStart(i)"
+              (dragover)="onSliceDragOver($event, i)"
+              (drop)="onSliceDrop(i)"
+              (dragend)="onSliceDragEnd()"
             >
               <span class="badge" [class.speech]="s.type === '#'" [class.scene]="s.type === '$'">
                 {{ s.type }}
@@ -176,6 +189,7 @@ const MIN_SLICE_PX = 10;
       color: inherit; cursor: pointer; border-radius: 4px; font-size: 16px;
     }
     .nav-btn:disabled { opacity: 0.35; cursor: default; }
+    .remove-page-btn { font-size: 13px; }
     .page-counter { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .slices-list {
@@ -194,6 +208,8 @@ const MIN_SLICE_PX = 10;
     }
     .slice-item.selected { border-color: #3b82f6; background: rgba(59,130,246,.12); }
     .slice-item:hover:not(.selected) { background: var(--surface-4, #2a2a2a); }
+    .slice-item.dragging { opacity: 0.4; }
+    .slice-item.drag-over { border-color: #3b82f6; background: rgba(59,130,246,.18); }
 
     .badge {
       width: 20px; height: 20px; border-radius: 4px;
@@ -677,6 +693,54 @@ export class AnnotationPage implements OnInit {
         ctx.strokeRect(c.x - HANDLE_SIZE / 2, c.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
       }
     }
+  }
+
+  // ── Remove page ──────────────────────────────────────────────────────────
+
+  removePage(index: number): void {
+    const updated = [...this.pages()];
+    if (updated.length <= 1) return;
+    const removed = updated.splice(index, 1)[0];
+    const m = new Map(this.allSlices());
+    m.delete(removed.id);
+    this.allSlices.set(m);
+    this.pages.set(updated);
+    const newIndex = Math.min(index, updated.length - 1);
+    this.currentIndex.set(newIndex);
+    this.loadingImage.set(true);
+  }
+
+  // ── Slice drag-and-drop reorder ───────────────────────────────────────────
+
+  dragSliceSourceIdx = signal<number | null>(null);
+  dragSliceOverIdx = signal<number | null>(null);
+
+  onSliceDragStart(idx: number): void {
+    this.dragSliceSourceIdx.set(idx);
+  }
+
+  onSliceDragOver(e: DragEvent, idx: number): void {
+    e.preventDefault();
+    this.dragSliceOverIdx.set(idx);
+  }
+
+  onSliceDrop(idx: number): void {
+    const from = this.dragSliceSourceIdx();
+    this.dragSliceSourceIdx.set(null);
+    this.dragSliceOverIdx.set(null);
+    if (from === null || from === idx) return;
+    const slices = [...this.getSlices()];
+    const [moved] = slices.splice(from, 1);
+    slices.splice(idx, 0, moved);
+    this.renumber(slices);
+    this.setSlices(slices);
+    this.selectedId.set(moved.id);
+    this.redraw();
+  }
+
+  onSliceDragEnd(): void {
+    this.dragSliceSourceIdx.set(null);
+    this.dragSliceOverIdx.set(null);
   }
 
   // ── Suggest regions ───────────────────────────────────────────────────────

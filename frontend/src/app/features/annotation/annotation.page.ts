@@ -109,32 +109,33 @@ const MIN_SLICE_PX = 10;
       <main class="canvas-area">
         @if (loadingImage()) {
           <div class="loading">Carregando…</div>
-        } @else {
-          <div
-            class="canvas-wrapper"
+        }
+        <!-- <img> must stay in DOM even while loading so (load) can fire -->
+        <div
+          class="canvas-wrapper"
+          [style.display]="loadingImage() ? 'none' : 'block'"
+          [style.width.px]="displayW()"
+          [style.height.px]="displayH()"
+        >
+          <img
+            #imgEl
+            [src]="currentImageUrl()"
             [style.width.px]="displayW()"
             [style.height.px]="displayH()"
-          >
-            <img
-              #imgEl
-              [src]="currentImageUrl()"
-              [style.width.px]="displayW()"
-              [style.height.px]="displayH()"
-              (load)="onImageLoad()"
-              alt="página"
-              draggable="false"
-            />
-            <canvas
-              #canvasEl
-              [width]="displayW()"
-              [height]="displayH()"
-              (mousedown)="onMouseDown($event)"
-              (mousemove)="onMouseMove($event)"
-              (mouseup)="onMouseUp($event)"
-              (mouseleave)="onMouseUp($event)"
-            ></canvas>
-          </div>
-        }
+            (load)="onImageLoad()"
+            alt="página"
+            draggable="false"
+          />
+          <canvas
+            #canvasEl
+            [width]="displayW()"
+            [height]="displayH()"
+            (mousedown)="onMouseDown($event)"
+            (mousemove)="onMouseMove($event)"
+            (mouseup)="onMouseUp($event)"
+            (mouseleave)="onMouseUp($event)"
+          ></canvas>
+        </div>
       </main>
     </div>
   `,

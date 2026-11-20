@@ -312,10 +312,15 @@ export class AnnotationPage implements OnInit {
 
   ngOnInit(): void {
     this.folderId = this.route.snapshot.paramMap.get('folderId') ?? '';
+    const startPageId = this.route.snapshot.queryParamMap.get('pageId');
     this.foldersApi.get(this.folderId).subscribe({
       next: folder => {
         const sorted = [...folder.pages].sort((a, b) => a.page_number - b.page_number);
         this.pages.set(sorted);
+        if (startPageId) {
+          const idx = sorted.findIndex(p => p.id === startPageId);
+          if (idx >= 0) this.currentIndex.set(idx);
+        }
         if (sorted.length > 0) this.loadingImage.set(true);
         this._loadExistingSlices(sorted);
       },

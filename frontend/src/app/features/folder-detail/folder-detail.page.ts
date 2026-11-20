@@ -164,7 +164,7 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
                             <button type="button" [disabled]="isAnalyzing(page.id)" (click)="analyze(page)" class="rounded px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-950 disabled:opacity-50 transition-colors">
                               Analisar
                             </button>
-                            <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            <a [routerLink]="['/pastas', folderId(), 'anotar']" [queryParams]="{pageId: page.id}" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                               Fatias
                             </a>
                           }
@@ -172,14 +172,14 @@ import { ToastService } from '../../shared/ui/ui-toast/toast.service';
                           <button type="button" [disabled]="isRetrying(page.id)" (click)="reprocess(page)" class="rounded px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50 transition-colors">
                             {{ isRetrying(page.id) ? 'Processando…' : 'Tentar novamente' }}
                           </button>
-                          <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                          <a [routerLink]="['/pastas', folderId(), 'anotar']" [queryParams]="{pageId: page.id}" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                             Fatias
                           </a>
                         } @else if (page.status !== 'PROCESSING') {
                           <button type="button" (click)="openPage(page)" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                             Abrir
                           </button>
-                          <a [routerLink]="['/pastas', folderId(), 'anotar']" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                          <a [routerLink]="['/pastas', folderId(), 'anotar']" [queryParams]="{pageId: page.id}" class="rounded px-2.5 py-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                             Fatias
                           </a>
                         }

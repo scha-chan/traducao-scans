@@ -36,7 +36,7 @@ class TextBlockExport(BaseModel):
     tipo: Literal["#", "$"]
     original: str
     localizacao: str
-    traducoes: list[TranslationSuggestionExport] = Field(min_length=1, max_length=5)
+    traducoes: list[TranslationSuggestionExport] = Field(min_length=0, max_length=5)
 
 
 PageExport = RootModel[list[TextBlockExport]]

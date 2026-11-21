@@ -95,6 +95,8 @@ class Folder(Base):
         ForeignKey("works.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_lang: Mapped[str] = mapped_column(String(10), nullable=False, server_default="ja")
+    target_lang: Mapped[str] = mapped_column(String(10), nullable=False, server_default="pt")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -107,7 +109,7 @@ class Folder(Base):
 
     work: Mapped["Work"] = relationship(back_populates="folders")
     pages: Mapped[list["Page"]] = relationship(
-        back_populates="folder", cascade="all, delete-orphan"
+        back_populates="folder", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -143,13 +145,16 @@ class Page(Base):
 
     folder: Mapped["Folder"] = relationship(back_populates="pages")
     character_mentions: Mapped[list["CharacterMention"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
     processing_runs: Mapped[list["ProcessingRun"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
     text_blocks: Mapped[list["TextBlock"]] = relationship(
-        back_populates="page", cascade="all, delete-orphan"
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
+    )
+    slices: Mapped[list["PageSlice"]] = relationship(
+        back_populates="page", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -177,7 +182,7 @@ class Character(Base):
 
     work: Mapped["Work"] = relationship(back_populates="characters")
     mentions: Mapped[list["CharacterMention"]] = relationship(
-        back_populates="character", cascade="all, delete-orphan"
+        back_populates="character", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -278,7 +283,7 @@ class TextBlock(Base):
     page: Mapped["Page"] = relationship(back_populates="text_blocks")
     processing_run: Mapped["ProcessingRun | None"] = relationship(back_populates="text_blocks")
     translation_suggestions: Mapped[list["TranslationSuggestion"]] = relationship(
-        back_populates="text_block", cascade="all, delete-orphan"
+        back_populates="text_block", cascade="all, delete-orphan", passive_deletes=True
     )
     character_mentions: Mapped[list["CharacterMention"]] = relationship(back_populates="text_block")
 
@@ -336,7 +341,7 @@ class GlossaryEntry(Base):
 
     work: Mapped["Work"] = relationship(back_populates="glossary_entries")
     occurrences: Mapped[list["GlossaryOccurrence"]] = relationship(
-        back_populates="entry", cascade="all, delete-orphan"
+        back_populates="entry", cascade="all, delete-orphan", passive_deletes=True
     )
 
 
@@ -366,6 +371,81 @@ class GlossaryOccurrence(Base):
 
     entry: Mapped["GlossaryEntry"] = relationship(back_populates="occurrences")
     page: Mapped["Page"] = relationship()
+    text_block: Mapped["TextBlock | None"] = relationship()
+
+
+class LogLevel(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    SUCCESS = "SUCCESS"
+
+
+class ProcessingLog(Base):
+    """Granular event log for each processing run stage."""
+
+    __tablename__ = "processing_logs"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    run_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("processing_runs.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    page_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    level: Mapped[LogLevel] = mapped_column(
+        Enum(LogLevel, name="log_level"), nullable=False, default=LogLevel.INFO
+    )
+    stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    run: Mapped["ProcessingRun | None"] = relationship()
+    page: Mapped["Page | None"] = relationship()
+
+
+class PageSlice(Base):
+    """Annotation slice drawn by the user on the annotation canvas (V3-AN)."""
+
+    __tablename__ = "page_slices"
+    __table_args__ = (
+        CheckConstraint("type IN ('#', '$')", name="ck_page_slices_type"),
+        UniqueConstraint(
+            "page_id",
+            "order_number",
+            name="uq_page_slices_page_order",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    page_id: Mapped[UUID] = mapped_column(
+        ForeignKey("pages.id", ondelete="CASCADE"), nullable=False
+    )
+    order_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    type: Mapped[str] = mapped_column(String(1), nullable=False)
+    bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_y: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_width: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    text_block_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("text_blocks.id", ondelete="SET NULL"), nullable=True
+    )
+    annotated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    page: Mapped["Page"] = relationship(back_populates="slices")
     text_block: Mapped["TextBlock | None"] = relationship()
 
 

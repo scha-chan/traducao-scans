@@ -16,14 +16,23 @@ from sqlalchemy.orm import selectinload
 
 from app import queue
 from app.api.pages import (
+    AnalyzeOut,
     PageOut,
-    ProcessPageOut,
     _block_to_export,
     _dispatch_and_wait,
-    _page_to_summary,
 )
 from app.db.deps import get_db
-from app.db.models import Folder, Page, PageStatus, ProcessingRun, RunType, TextBlock, Work
+from app.db.models import (
+    BlockSource,
+    Folder,
+    Page,
+    PageSlice,
+    PageStatus,
+    ProcessingRun,
+    RunType,
+    TextBlock,
+    Work,
+)
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -47,12 +56,29 @@ _PIL_TO_MIME = {
 class FolderCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=120, alias="name")
     work_id: UUID | None = None
+    source_lang: str = "ja"
+    target_lang: str = "pt"
 
     model_config = {"populate_by_name": True}
 
 
 class FolderUpdate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=120)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    source_lang: str | None = None
+    target_lang: str | None = None
+
+
+def _folder_status(pages: list["Page"]) -> str:
+    if not pages:
+        return "INCOMPLETE"
+    statuses = {p.status for p in pages}
+    if PageStatus.PROCESSING in statuses or PageStatus.PENDING in statuses:
+        return "PROCESSING"
+    if all(p.status == PageStatus.APPROVED for p in pages):
+        return "DONE"
+    if all(p.status in (PageStatus.APPROVED, PageStatus.ERROR) for p in pages):
+        return "DONE_WITH_ERRORS"
+    return "INCOMPLETE"
 
 
 class FolderOut(BaseModel):
@@ -61,25 +87,72 @@ class FolderOut(BaseModel):
     work_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    status: str = "INCOMPLETE"
+    total_pages: int = 0
+    processed_pages: int = 0
+    error_pages: int = 0
+    source_lang: str = "ja"
+    target_lang: str = "pt"
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def from_folder(cls, folder: "Folder") -> "FolderOut":
+        pages = folder.pages if folder.pages is not None else []
+        processed = sum(1 for p in pages if p.status in (PageStatus.APPROVED, PageStatus.REVIEW))
+        errors = sum(1 for p in pages if p.status == PageStatus.ERROR)
+        return cls(
+            id=folder.id,
+            name=folder.name,
+            work_id=folder.work_id,
+            created_at=folder.created_at,
+            updated_at=folder.updated_at,
+            status=_folder_status(pages),
+            total_pages=len(pages),
+            processed_pages=processed,
+            error_pages=errors,
+            source_lang=folder.source_lang,
+            target_lang=folder.target_lang,
+        )
+
+
+class PageSummaryOut(BaseModel):
+    id: UUID
+    page_number: int
+    file_name: str
+    status: str
+    block_count: int
+    slice_count: int
+    edited: bool
+    thumbnail_url: str
+    image_url: str
+    error_message: str | None = None
+
+
+class FolderDetailOut(FolderOut):
+    pages: list[PageSummaryOut] = []
+
 
 async def _get_or_404(folder_id: UUID, db: AsyncSession) -> Folder:
-    result = await db.get(Folder, folder_id)
-    if result is None:
+    result = await db.execute(
+        select(Folder).options(selectinload(Folder.pages)).where(Folder.id == folder_id)
+    )
+    folder = result.scalar_one_or_none()
+    if folder is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pasta não encontrada")
-    return result
+    return folder
 
 
 @router.get("", response_model=list[FolderOut])
-async def list_folders(db: AsyncSession = Depends(get_db)) -> list[Folder]:
-    result = await db.execute(select(Folder).order_by(Folder.created_at.desc()))
-    return list(result.scalars().all())
+async def list_folders(db: AsyncSession = Depends(get_db)) -> list[FolderOut]:
+    result = await db.execute(
+        select(Folder).options(selectinload(Folder.pages)).order_by(Folder.created_at.desc())
+    )
+    return [FolderOut.from_folder(f) for f in result.scalars().all()]
 
 
 @router.post("", response_model=FolderOut, status_code=status.HTTP_201_CREATED)
-async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) -> Folder:
+async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) -> FolderOut:
     if body.work_id is not None:
         work = await db.get(Work, body.work_id)
         if work is None:
@@ -91,7 +164,9 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
         db.add(default_work)
         await db.flush()
         work_id = default_work.id
-    folder = Folder(name=body.title, work_id=work_id)
+    folder = Folder(
+        name=body.title, work_id=work_id, source_lang=body.source_lang, target_lang=body.target_lang
+    )
     db.add(folder)
     try:
         await db.commit()
@@ -101,21 +176,53 @@ async def create_folder(body: FolderCreate, db: AsyncSession = Depends(get_db)) 
             status_code=status.HTTP_409_CONFLICT,
             detail="Já existe uma pasta com esse nome",
         ) from None
-    await db.refresh(folder)
-    return folder
+    return FolderOut.from_folder(await _get_or_404(folder.id, db))
 
 
-@router.get("/{folder_id}", response_model=FolderOut)
-async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> Folder:
-    return await _get_or_404(folder_id, db)
+@router.get("/{folder_id}", response_model=FolderDetailOut)
+async def get_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> FolderDetailOut:
+    result = await db.execute(
+        select(Folder)
+        .options(
+            selectinload(Folder.pages).selectinload(Page.text_blocks),
+            selectinload(Folder.pages).selectinload(Page.slices),
+        )
+        .where(Folder.id == folder_id)
+    )
+    folder = result.scalar_one_or_none()
+    if folder is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pasta não encontrada")
+
+    base = FolderOut.from_folder(folder)
+    page_summaries = [
+        PageSummaryOut(
+            id=p.id,
+            page_number=p.page_number,
+            file_name=p.file_name,
+            status=p.status.value,
+            block_count=len(p.text_blocks),
+            slice_count=len(p.slices),
+            edited=any(b.source == BlockSource.MANUAL for b in p.text_blocks),
+            thumbnail_url=f"/api/pages/{p.id}/thumbnail",
+            image_url=f"/api/pages/{p.id}/image",
+            error_message=p.error_message,
+        )
+        for p in sorted(folder.pages, key=lambda p: p.page_number)
+    ]
+    return FolderDetailOut(**base.model_dump(), pages=page_summaries)
 
 
 @router.patch("/{folder_id}", response_model=FolderOut)
 async def update_folder(
     folder_id: UUID, body: FolderUpdate, db: AsyncSession = Depends(get_db)
-) -> Folder:
+) -> FolderOut:
     folder = await _get_or_404(folder_id, db)
-    folder.name = body.name
+    if body.name is not None:
+        folder.name = body.name
+    if body.source_lang is not None:
+        folder.source_lang = body.source_lang
+    if body.target_lang is not None:
+        folder.target_lang = body.target_lang
     try:
         await db.commit()
     except Exception:
@@ -124,8 +231,7 @@ async def update_folder(
             status_code=status.HTTP_409_CONFLICT,
             detail="Já existe uma pasta com esse nome",
         ) from None
-    await db.refresh(folder)
-    return folder
+    return FolderOut.from_folder(await _get_or_404(folder_id, db))
 
 
 @router.delete("/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -135,13 +241,18 @@ async def delete_folder(folder_id: UUID, db: AsyncSession = Depends(get_db)) -> 
     await db.commit()
 
 
-@router.post("/{folder_id}/pages/process", response_model=ProcessPageOut, tags=["pages"])
+@router.post(
+    "/{folder_id}/pages/process",
+    response_model=AnalyzeOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["pages"],
+)
 async def process_page_upload(
     folder_id: UUID,
     file: UploadFile,
     page_number: int = Form(...),
     db: AsyncSession = Depends(get_db),
-) -> ProcessPageOut:
+) -> AnalyzeOut:
     folder = await _get_or_404(folder_id, db)
     dest_dir = Path(settings.upload_dir) / "folders" / str(folder_id)
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -192,12 +303,22 @@ async def process_page_upload(
     await db.flush()
 
     run = ProcessingRun(page_id=page.id, run_type=RunType.FULL)
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
     pool = await queue.get_pool()
-    blocks = await _dispatch_and_wait(pool, db, page, run)
-    return ProcessPageOut(
-        page=_page_to_summary(page, blocks),
-        blocos=[_block_to_export(b) for b in blocks],
-    )
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        page.status = PageStatus.ERROR
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de análise",
+        )
+
+    return AnalyzeOut(run_id=run.id, page_id=page.id)
 
 
 @router.post(
@@ -425,3 +546,132 @@ async def batch_process_folder(
         failed=failed,
         results=batch_results,
     )
+
+
+# ---------------------------------------------------------------------------
+# Annotation (V3-AN-BE-01)
+# ---------------------------------------------------------------------------
+
+from typing import Literal  # noqa: E402
+
+
+class BBoxIn(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class AnnotationRegion(BaseModel):
+    order: int = Field(..., ge=1)
+    type: Literal["#", "$"]
+    bbox: BBoxIn
+
+
+class PageAnnotationIn(BaseModel):
+    page_id: UUID
+    regions: list[AnnotationRegion] = Field(..., min_length=1)
+
+
+class AnnotateRequest(BaseModel):
+    pages: list[PageAnnotationIn] = Field(..., min_length=1)
+
+
+class AnnotateOut(BaseModel):
+    runs: list[AnalyzeOut]
+
+
+@router.post(
+    "/{folder_id}/annotate",
+    response_model=AnnotateOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def annotate_folder(
+    folder_id: UUID,
+    body: AnnotateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AnnotateOut:
+    """Save manual annotations and enqueue annotation pipeline jobs (V3-AN-BE-01).
+
+    For each page: persists page_slices rows, creates MANUAL TextBlocks with
+    bbox/type/order pre-set, then enqueues an OCR+translation job that skips
+    detection, classification, and reading_order stages.
+    """
+    folder = await _get_or_404(folder_id, db)
+
+    # Validate all page_ids belong to this folder before any writes
+    page_ids = [pa.page_id for pa in body.pages]
+    result = await db.execute(
+        select(Page).where(Page.id.in_(page_ids), Page.folder_id == folder.id)
+    )
+    db_pages = {p.id: p for p in result.scalars().all()}
+    missing = [str(pid) for pid in page_ids if pid not in db_pages]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Páginas não encontradas nesta pasta: {missing}",
+        )
+
+    runs: list[AnalyzeOut] = []
+
+    for pa in body.pages:
+        page = db_pages[pa.page_id]
+
+        # Replace existing slices and MANUAL blocks for this page
+        from sqlalchemy import delete as sql_delete  # noqa: PLC0415
+
+        await db.execute(sql_delete(PageSlice).where(PageSlice.page_id == page.id))
+        await db.execute(
+            sql_delete(TextBlock).where(
+                TextBlock.page_id == page.id, TextBlock.source == BlockSource.MANUAL
+            )
+        )
+        await db.flush()
+
+        for region in pa.regions:
+            block = TextBlock(
+                page_id=page.id,
+                order_number=region.order,
+                type=region.type,
+                bbox=region.bbox.model_dump(),
+                source=BlockSource.MANUAL,
+            )
+            db.add(block)
+            await db.flush()
+
+            db.add(
+                PageSlice(
+                    page_id=page.id,
+                    order_number=region.order,
+                    type=region.type,
+                    bbox_x=region.bbox.x,
+                    bbox_y=region.bbox.y,
+                    bbox_width=region.bbox.width,
+                    bbox_height=region.bbox.height,
+                    text_block_id=block.id,
+                )
+            )
+
+        run = ProcessingRun(
+            page_id=page.id,
+            run_type=RunType.FULL,
+            model_metadata={"annotation_mode": True},
+        )
+        page.status = PageStatus.PROCESSING
+        db.add(run)
+        await db.flush()
+        runs.append(AnalyzeOut(run_id=run.id, page_id=page.id))
+
+    await db.commit()
+
+    pool = await queue.get_pool()
+    for run_out in runs:
+        job = await pool.enqueue_job("analyze_page", str(run_out.page_id), str(run_out.run_id))
+        if job is None:
+            logger.warning(
+                "Failed to enqueue annotation job page_id=%s run_id=%s",
+                run_out.page_id,
+                run_out.run_id,
+            )
+
+    return AnnotateOut(runs=runs)

@@ -65,6 +65,14 @@ class MangaOcrProvider:
             else os.environ.get("MANGA_OCR_MODEL", "kha-white/manga-ocr-base")
         )
         self._mocr = MangaOcr(model_name)
+        # In newer transformers, ViTImageProcessorPil has no .decode(); grab the
+        # tokenizer explicitly so decoding works regardless of transformers version.
+        try:
+            self._tokenizer = self._mocr.processor.tokenizer
+        except AttributeError:
+            from transformers import AutoTokenizer  # noqa: PLC0415
+
+            self._tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     def ocr_region(self, region: Image.Image, bbox: BBox) -> OcrResult:
         import torch  # noqa: PLC0415
@@ -82,7 +90,7 @@ class MangaOcrProvider:
             )
 
         token_ids = out.sequences[0].cpu()
-        text: str = self._mocr.processor.decode(token_ids, skip_special_tokens=True)
+        text: str = self._tokenizer.decode(token_ids, skip_special_tokens=True)
 
         # Geometric mean of max token probabilities as confidence proxy
         scores = out.scores  # tuple of (1, vocab_size) tensors

@@ -27,6 +27,24 @@ _HF_INFERENCE_BASE = "https://api-inference.huggingface.co/models"
 _DEFAULT_JA_EN_MODEL = "Helsinki-NLP/opus-mt-ja-en"
 _DEFAULT_EN_PT_MODEL = "Helsinki-NLP/opus-mt-tc-big-en-pt"
 
+_SRC_TO_EN: dict[str, str | None] = {
+    "ja": "Helsinki-NLP/opus-mt-ja-en",
+    "zh": "Helsinki-NLP/opus-mt-zh-en",
+    "ko": "Helsinki-NLP/opus-mt-ko-en",
+    "es": "Helsinki-NLP/opus-mt-es-en",
+    "pt": "Helsinki-NLP/opus-mt-ROMANCE-en",
+    "en": None,
+}
+
+_EN_TO_TGT: dict[str, str | None] = {
+    "pt": "Helsinki-NLP/opus-mt-tc-big-en-pt",
+    "es": "Helsinki-NLP/opus-mt-tc-big-en-es",
+    "zh": "Helsinki-NLP/opus-mt-en-zh",
+    "ko": "Helsinki-NLP/opus-mt-tc-big-en-ko",
+    "ja": "Helsinki-NLP/opus-mt-en-jap",
+    "en": None,
+}
+
 
 @dataclass
 class TranslationResult:
@@ -90,7 +108,7 @@ class HuggingFaceTranslationProvider:
 
 
 class MarianTranslationProvider:
-    """Two-step JA→EN→PT translation using local MarianMT models.
+    """Two-step SRC→EN→TGT translation using local MarianMT models.
 
     Models are downloaded from HuggingFace on first use and cached in
     ``~/.cache/huggingface/``.  No API token required after download.
@@ -100,6 +118,9 @@ class MarianTranslationProvider:
 
     def __init__(
         self,
+        source_lang: str = "ja",
+        target_lang: str = "pt",
+        # Legacy params kept for backward compatibility
         ja_en_model: str | None = None,
         en_pt_model: str | None = None,
     ) -> None:
@@ -111,17 +132,28 @@ class MarianTranslationProvider:
                 "Install them with: pip install transformers sentencepiece torch"
             ) from exc
 
-        ja_en: str = (
-            ja_en_model or os.environ.get("TRANSLATION_JA_EN_MODEL") or _DEFAULT_JA_EN_MODEL
-        )
-        en_pt: str = (
-            en_pt_model or os.environ.get("TRANSLATION_EN_PT_MODEL") or _DEFAULT_EN_PT_MODEL
-        )
+        # Legacy explicit model paths take precedence over lang-based lookup
+        src_en_name: str | None = ja_en_model or os.environ.get("TRANSLATION_JA_EN_MODEL")
+        en_tgt_name: str | None = en_pt_model or os.environ.get("TRANSLATION_EN_PT_MODEL")
 
-        self._tok_ja_en: Any = MarianTokenizer.from_pretrained(ja_en)
-        self._mod_ja_en: Any = MarianMTModel.from_pretrained(ja_en)
-        self._tok_en_pt: Any = MarianTokenizer.from_pretrained(en_pt)
-        self._mod_en_pt: Any = MarianMTModel.from_pretrained(en_pt)
+        if src_en_name is None:
+            src_en_name = _SRC_TO_EN.get(source_lang, _DEFAULT_JA_EN_MODEL)
+        if en_tgt_name is None:
+            en_tgt_name = _EN_TO_TGT.get(target_lang, _DEFAULT_EN_PT_MODEL)
+
+        if src_en_name is not None:
+            self._tok_src_en: Any = MarianTokenizer.from_pretrained(src_en_name)
+            self._mod_src_en: Any = MarianMTModel.from_pretrained(src_en_name)
+        else:
+            self._tok_src_en = None
+            self._mod_src_en = None
+
+        if en_tgt_name is not None:
+            self._tok_en_tgt: Any = MarianTokenizer.from_pretrained(en_tgt_name)
+            self._mod_en_tgt: Any = MarianMTModel.from_pretrained(en_tgt_name)
+        else:
+            self._tok_en_tgt = None
+            self._mod_en_tgt = None
 
     def _run(self, tok: Any, mod: Any, text: str) -> str:  # noqa: ANN401
         tokens = tok([text], return_tensors="pt", padding=True)
@@ -129,6 +161,6 @@ class MarianTranslationProvider:
         return str(tok.decode(ids[0], skip_special_tokens=True))
 
     def translate(self, text: str) -> TranslationResult:
-        en_text = self._run(self._tok_ja_en, self._mod_ja_en, text)
-        pt_text = self._run(self._tok_en_pt, self._mod_en_pt, en_text)
-        return TranslationResult(translation=pt_text, observation="", relevance=3)
+        mid = self._run(self._tok_src_en, self._mod_src_en, text) if self._mod_src_en else text
+        result = self._run(self._tok_en_tgt, self._mod_en_tgt, mid) if self._mod_en_tgt else mid
+        return TranslationResult(translation=result, observation="", relevance=3)

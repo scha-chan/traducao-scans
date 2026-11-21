@@ -1,10 +1,11 @@
 import { Component, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { UiNotificationBellComponent } from '../../shared/ui/ui-notification-bell.component';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, UiNotificationBellComponent],
   template: `
     <header class="sticky top-0 z-30 h-14 flex items-center justify-between px-4 md:px-6 bg-white/90 backdrop-blur border-b border-zinc-200 dark:bg-zinc-900/90 dark:border-zinc-800">
       <a routerLink="/" class="flex items-center gap-2 text-zinc-900 dark:text-zinc-100 font-semibold text-lg no-underline">
@@ -14,19 +15,23 @@ import { RouterLink } from '@angular/router';
         <span>Manga Translator</span>
       </a>
 
-      <a
-        routerLink="/nova-traducao"
-        [class.opacity-50]="processing()"
-        [class.pointer-events-none]="processing()"
-        [attr.aria-disabled]="processing() || null"
-        [title]="processing() ? 'Processamento em andamento' : null"
-        class="inline-flex items-center gap-2 rounded-lg px-4 py-2 bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-medium focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-2 transition-colors text-sm"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 5v14M5 12h14"/>
-        </svg>
-        Nova tradução
-      </a>
+      <div class="flex items-center gap-2">
+        <ui-notification-bell />
+
+        <a
+          routerLink="/nova-traducao"
+          [class.opacity-50]="processing()"
+          [class.pointer-events-none]="processing()"
+          [attr.aria-disabled]="processing() || null"
+          [title]="processing() ? 'Processamento em andamento' : null"
+          class="inline-flex items-center gap-2 rounded-lg px-4 py-2 bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-medium focus-visible:outline-none focus-visible:ring-2 ring-primary-500 ring-offset-2 transition-colors text-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Nova tradução
+        </a>
+      </div>
     </header>
   `,
 })

@@ -50,6 +50,8 @@ export interface FolderSummary {
   processed_pages: number;
   error_pages: number;
   updated_at: string;
+  source_lang: string;
+  target_lang: string;
 }
 
 export interface PageSummary {
@@ -58,10 +60,21 @@ export interface PageSummary {
   file_name: string;
   status: PageStatus;
   block_count: number;
+  slice_count: number;
   edited: boolean;
   thumbnail_url: string;
   image_url: string;
   error_message?: string;
+}
+
+export interface PageSliceOut {
+  id: string;
+  order_number: number;
+  type: SliceType;
+  bbox_x: number;
+  bbox_y: number;
+  bbox_width: number;
+  bbox_height: number;
 }
 
 export interface FolderDetail extends FolderSummary {
@@ -87,6 +100,17 @@ export interface FolderExport {
 
 export interface AnalyzeResponse {
   run_id: string;
+  page_id?: string;
+}
+
+export interface PageEvent {
+  event: 'connected' | 'done' | 'error';
+  page_id?: string;
+  run_id?: string;
+  block_count?: number;
+  tokens_used?: number;
+  processing_ms?: number;
+  message?: string;
 }
 
 export type SpeechRegister = 'formal' | 'informal' | 'childlike' | 'rough' | 'polite';
@@ -158,4 +182,47 @@ export interface JsonValidationError {
   blockIndex: number;
   field: string;
   message: string;
+}
+
+// Annotation (V3-AN)
+export type SliceType = '#' | '$';
+
+export interface AnnotationBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AnnotationRegion {
+  order: number;
+  type: SliceType;
+  bbox: AnnotationBBox;
+}
+
+export interface PageAnnotationIn {
+  page_id: string;
+  regions: AnnotationRegion[];
+}
+
+export interface AnnotateRequest {
+  pages: PageAnnotationIn[];
+}
+
+export interface AnnotateRunOut {
+  run_id: string;
+  page_id?: string;
+}
+
+export interface AnnotateOut {
+  runs: AnnotateRunOut[];
+}
+
+export interface DetectedRegion {
+  bbox: AnnotationBBox;
+  confidence?: number;
+}
+
+export interface DetectOut {
+  regions: DetectedRegion[];
 }

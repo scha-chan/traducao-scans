@@ -615,6 +615,7 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
         const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
         this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
       },
+      error: () => {/* metas são opcionais; blocksError já cobre o caso crítico */},
     });
   }
 
@@ -717,21 +718,33 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     this.reprocessing.set(true);
     this.reprocessSub?.unsubscribe();
     this.reprocessSub = this.pagesApi.reprocess(this.page().id).subscribe({
-      next: (result) => {
-        this.blocks.set(result.blocos);
-        this.blockTable?.markAsPristine();
-        this.blockSaveState.set('idle');
-        this.reprocessing.set(false);
-        this.blockMetas.set([]);
-        this.blockMetaSub?.unsubscribe();
-        this.blockMetaSub = this.pagesApi.getBlocks(this.page().id).subscribe({
-          next: (data: BlockOut[]) => {
-            const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
-            this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
-          },
-        });
-        this.toast.success('Página reprocessada');
-        this.pageReprocessed.emit(result.page);
+      next: async (result) => {
+        const pageId = result.page_id ?? this.page().id;
+        try {
+          await this.pagesApi.waitForEvent(pageId);
+          this.pagesApi.getJson(pageId).subscribe({
+            next: (blocos) => {
+              this.blocks.set(blocos);
+              this.blockTable?.markAsPristine();
+              this.blockSaveState.set('idle');
+            },
+          });
+          this.blockMetas.set([]);
+          this.blockMetaSub?.unsubscribe();
+          this.blockMetaSub = this.pagesApi.getBlocks(pageId).subscribe({
+            next: (data: BlockOut[]) => {
+              const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
+              this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
+            },
+          });
+          this.toast.success('Página reprocessada');
+          const updated: PageSummary = { ...this.page(), status: 'REVIEW' };
+          this.pageReprocessed.emit(updated);
+        } catch {
+          this.toast.error('Erro ao reprocessar a página');
+        } finally {
+          this.reprocessing.set(false);
+        }
       },
       error: (err) => {
         this.reprocessing.set(false);
@@ -749,14 +762,32 @@ export class PageReviewModalComponent implements OnInit, AfterViewInit, OnDestro
     this.regenerating.set(true);
     this.regenerateSub?.unsubscribe();
     this.regenerateSub = this.pagesApi.regenerate(this.page().id).subscribe({
-      next: (result) => {
-        this.blocks.set(result.blocos);
-        this.blockTable?.markAsPristine();
-        this.blockSaveState.set('idle');
-        this.regenerating.set(false);
-        const costMsg = result.cost_usd != null ? ` (custo: $${result.cost_usd.toFixed(4)})` : '';
-        this.toast.success(`Traduções regeneradas${costMsg}`);
-        this.pageReprocessed.emit(result.page);
+      next: async () => {
+        const pageId = this.page().id;
+        try {
+          await this.pagesApi.waitForEvent(pageId);
+          this.pagesApi.getJson(pageId).subscribe({
+            next: (blocos) => {
+              this.blocks.set(blocos);
+              this.blockTable?.markAsPristine();
+              this.blockSaveState.set('idle');
+            },
+          });
+          this.blockMetas.set([]);
+          this.blockMetaSub?.unsubscribe();
+          this.blockMetaSub = this.pagesApi.getBlocks(pageId).subscribe({
+            next: (data: BlockOut[]) => {
+              const sorted = [...data].sort((a, b) => a.order_number - b.order_number);
+              this.blockMetas.set(sorted.map((b) => ({ id: b.id, review_status: b.review_status })));
+            },
+          });
+          this.toast.success('Traduções regeneradas');
+          this.pageReprocessed.emit({ ...this.page(), status: 'REVIEW' });
+        } catch {
+          this.toast.error('Não foi possível regenerar as traduções. Tente novamente.');
+        } finally {
+          this.regenerating.set(false);
+        }
       },
       error: () => {
         this.regenerating.set(false);

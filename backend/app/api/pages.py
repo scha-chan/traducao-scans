@@ -1,26 +1,31 @@
+import asyncio
 import io
+import json
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from arq.connections import ArqRedis
+import redis.asyncio as aioredis
 from contracts.models import TextBlockExport
 from contracts.validator import validate_page_export
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from PIL import Image
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app import queue
 from app.api.blocks import BlockOut, _to_block_out
 from app.db.deps import get_db
+from app.db.engine import AsyncSessionLocal
 from app.db.models import (
     BlockSource,
     Page,
+    PageSlice,
     PageStatus,
     ProcessingRun,
     ReviewStatus,
@@ -33,7 +38,48 @@ from app.settings import settings
 router = APIRouter(prefix="/pages", tags=["pages"])
 
 _THUMBNAIL_WIDTH = 300
-_PROCESS_TIMEOUT = 180.0
+_BATCH_JOB_TIMEOUT = 600.0
+
+
+async def _dispatch_and_wait(
+    pool: Any,  # noqa: ANN401
+    db: AsyncSession,
+    page: Page,
+    run: ProcessingRun,
+) -> list[TextBlock]:
+    """Enqueue arq job and wait up to 600 s — used only by batch-process."""
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de análise",
+        )
+
+    try:
+        await job.result(timeout=_BATCH_JOB_TIMEOUT)
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Tempo limite de processamento excedido",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro no processamento: {exc}",
+        ) from exc
+
+    await db.refresh(page)
+    result = await db.execute(
+        select(TextBlock)
+        .where(TextBlock.page_id == page.id)
+        .options(selectinload(TextBlock.translation_suggestions))
+        .order_by(TextBlock.order_number)
+    )
+    return list(result.scalars().all())
 
 
 class PageOut(BaseModel):
@@ -110,47 +156,6 @@ def _page_to_summary(page: Page, blocks: list[TextBlock]) -> PageSummary:
         thumbnail_url=f"/api/pages/{page.id}/thumbnail",
         image_url=f"/api/pages/{page.id}/image",
     )
-
-
-async def _dispatch_and_wait(
-    pool: ArqRedis,
-    db: AsyncSession,
-    page: Page,
-    run: ProcessingRun,
-) -> list[TextBlock]:
-    """Set page to PROCESSING, enqueue arq job, wait up to 180 s, return blocks."""
-    page.status = PageStatus.PROCESSING
-    db.add(run)
-    await db.commit()
-
-    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Falha ao enfileirar tarefa de análise",
-        )
-
-    try:
-        await job.result(timeout=_PROCESS_TIMEOUT)
-    except TimeoutError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Tempo limite de processamento excedido",
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro no processamento: {exc}",
-        ) from exc
-
-    await db.refresh(page)
-    result = await db.execute(
-        select(TextBlock)
-        .where(TextBlock.page_id == page.id)
-        .options(selectinload(TextBlock.translation_suggestions))
-        .order_by(TextBlock.order_number)
-    )
-    return list(result.scalars().all())
 
 
 def _run_to_out(run: ProcessingRun) -> RunOut:
@@ -258,6 +263,7 @@ async def approve_page(page_id: UUID, db: AsyncSession = Depends(get_db)) -> Pag
 
 class AnalyzeOut(BaseModel):
     run_id: UUID
+    page_id: UUID | None = None
 
 
 class RegenerateOut(BaseModel):
@@ -366,12 +372,98 @@ async def analyze_page_async(
     return AnalyzeOut(run_id=run.id)
 
 
-@router.post("/{page_id}/process", response_model=ProcessPageOut)
+_TERMINAL_STATUSES = {PageStatus.REVIEW, PageStatus.APPROVED, PageStatus.ERROR}
+
+
+@router.get("/{page_id}/events")
+async def page_events(page_id: UUID) -> StreamingResponse:
+    """SSE stream that emits one event when the page processing finishes (or errors).
+
+    The client should subscribe immediately after enqueuing the job and listen
+    for ``{"event": "done", ...}`` or ``{"event": "error", ...}``.
+    A ``: keep-alive`` comment is sent every 25 s to prevent proxy timeouts.
+
+    Race-condition guard: after subscribing to Redis (so no future event is
+    missed), we check the page's current status in the DB.  If the worker
+    already finished before this connection was opened, we emit the synthetic
+    event immediately instead of waiting forever.
+    """
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        client = aioredis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]
+        pubsub = client.pubsub()
+        channel = f"page:{page_id}:events"
+        await pubsub.subscribe(channel)
+        yield 'data: {"event":"connected"}\n\n'
+
+        # Subscribe FIRST, then check DB — this order ensures we never miss an
+        # event: either the worker hasn't published yet (we'll receive it via
+        # pubsub) or it already did (we detect it here and emit synthetically).
+        async with AsyncSessionLocal() as db:
+            page = await db.get(Page, page_id)
+            if page is not None and page.status in _TERMINAL_STATUSES:
+                await pubsub.unsubscribe(channel)
+                await client.aclose()
+                if page.status == PageStatus.ERROR:
+                    payload = json.dumps(
+                        {
+                            "event": "error",
+                            "page_id": str(page_id),
+                            "message": page.error_message or "Erro no processamento",
+                        }
+                    )
+                else:
+                    count_result = await db.execute(
+                        select(func.count())
+                        .select_from(TextBlock)
+                        .where(TextBlock.page_id == page_id)
+                    )
+                    block_count: int = count_result.scalar_one()
+                    payload = json.dumps(
+                        {
+                            "event": "done",
+                            "page_id": str(page_id),
+                            "block_count": block_count,
+                        }
+                    )
+                yield f"data: {payload}\n\n"
+                return
+
+        try:
+            while True:
+                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=25.0)
+                if msg is None:
+                    yield ": keep-alive\n\n"
+                    continue
+                if msg["type"] == "message":
+                    yield f"data: {msg['data']}\n\n"
+                    data: dict[str, object] = json.loads(msg["data"])
+                    if data.get("event") in ("done", "error"):
+                        break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await pubsub.unsubscribe(channel)
+            await client.aclose()
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{page_id}/process", status_code=status.HTTP_202_ACCEPTED, response_model=AnalyzeOut)
 async def reprocess_page(
     page_id: UUID,
     force: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-) -> ProcessPageOut:
+) -> AnalyzeOut:
+    """Enqueue a full analysis and return immediately (202).
+
+    Subscribe to ``GET /pages/{page_id}/events`` to receive the completion
+    notification via Server-Sent Events.
+    """
     page = await _get_or_404(page_id, db)
 
     if page.status == PageStatus.PROCESSING:
@@ -404,12 +496,22 @@ async def reprocess_page(
             )
 
     run = ProcessingRun(page_id=page_id, run_type=RunType.FULL)
+    page.status = PageStatus.PROCESSING
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+
     pool = await queue.get_pool()
-    blocks = await _dispatch_and_wait(pool, db, page, run)
-    return ProcessPageOut(
-        page=_page_to_summary(page, blocks),
-        blocos=[_block_to_export(b) for b in blocks],
-    )
+    job = await pool.enqueue_job("analyze_page", str(page.id), str(run.id))
+    if job is None:
+        page.status = PageStatus.ERROR
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enfileirar tarefa de análise",
+        )
+
+    return AnalyzeOut(run_id=run.id)
 
 
 @router.get("/{page_id}/image")
@@ -635,6 +737,70 @@ async def reorder_blocks(
     for b in ordered:
         await db.refresh(b)
     return [_block_to_export(b) for b in ordered]
+
+
+class DetectedRegion(BaseModel):
+    bbox: dict[str, int]
+    confidence: float | None = None
+
+
+class DetectOut(BaseModel):
+    regions: list[DetectedRegion]
+
+
+_detection_provider: "Any | None" = None
+
+
+def _get_detection_provider() -> "Any":  # noqa: ANN401
+    """Lazy-load ComicTextDetectorProvider (singleton, shared across requests)."""
+    import os  # noqa: PLC0415
+
+    global _detection_provider  # noqa: PLW0603
+    if _detection_provider is None:
+        from agent.providers.detection import ComicTextDetectorProvider  # noqa: PLC0415
+
+        _detection_provider = ComicTextDetectorProvider(model_path=os.environ.get("CTD_MODEL_PATH"))
+    return _detection_provider
+
+
+class PageSliceOut(BaseModel):
+    id: UUID
+    order_number: int
+    type: str
+    bbox_x: int
+    bbox_y: int
+    bbox_width: int
+    bbox_height: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{page_id}/slices", response_model=list[PageSliceOut], tags=["pages"])
+async def get_page_slices(page_id: UUID, db: AsyncSession = Depends(get_db)) -> list[PageSliceOut]:
+    """Return all page_slices for a page, ordered by order_number."""
+    page = await _get_or_404(page_id, db)
+    result = await db.execute(
+        select(PageSlice).where(PageSlice.page_id == page.id).order_by(PageSlice.order_number)
+    )
+    rows = list(result.scalars().all())
+    return [PageSliceOut.model_validate(r) for r in rows]
+
+
+@router.get("/{page_id}/detect", response_model=DetectOut, tags=["pages"])
+async def detect_regions(page_id: UUID, db: AsyncSession = Depends(get_db)) -> DetectOut:
+    """Return detected text-region bboxes without running the full pipeline (V3-AN-FE-02)."""
+    page = await _get_or_404(page_id, db)
+    try:
+        provider = _get_detection_provider()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Modelo de detecção indisponível: {exc}",
+        ) from exc
+
+    loop = asyncio.get_event_loop()
+    bboxes = await loop.run_in_executor(None, provider.detect, page.file_path)
+    return DetectOut(regions=[DetectedRegion(bbox=b.to_dict()) for b in bboxes])
 
 
 def _block_to_export(block: TextBlock) -> TextBlockExport:

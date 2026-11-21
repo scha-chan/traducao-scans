@@ -1,5 +1,4 @@
 import { Component, input } from '@angular/core';
-import { NgFor } from '@angular/common';
 
 export interface KbdShortcut {
   keys: string[];
@@ -9,7 +8,6 @@ export interface KbdShortcut {
 @Component({
   selector: 'ui-kbd',
   standalone: true,
-  imports: [NgFor],
   template: `
     <span class="inline-flex items-center gap-1">
       @for (key of keys(); track key) {
@@ -27,7 +25,7 @@ export class UiKbdComponent {
 @Component({
   selector: 'ui-kbd-legend',
   standalone: true,
-  imports: [NgFor, UiKbdComponent],
+  imports: [UiKbdComponent],
   template: `
     <span class="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
       @for (shortcut of shortcuts(); track shortcut.label) {

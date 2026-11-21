@@ -30,7 +30,7 @@
             "$ref": "#/$defs/TranslationSuggestionExport"
           },
           "maxItems": 5,
-          "minItems": 1,
+          "minItems": 0,
           "title": "Traducoes",
           "type": "array"
         }

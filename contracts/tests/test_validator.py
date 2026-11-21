@@ -178,8 +178,8 @@ def test_traducoes_cinco_itens_valido() -> None:
     assert _issues(_page({"traducoes": [_SUGG] * 5})) == []
 
 
-def test_traducoes_vazia_invalida() -> None:
-    assert _fields(_page({"traducoes": []}))
+def test_traducoes_vazia_valida() -> None:
+    assert _issues(_page({"traducoes": []})) == []
 
 
 def test_traducoes_seis_itens_invalida() -> None:
@@ -223,7 +223,6 @@ def test_relevancia_seis_invalida() -> None:
         (_page({"tipo": "X"}), "tipo"),
         (_page({"original": None}), "original"),
         (_page({"localizacao": None}), "localizacao"),
-        (_page({"traducoes": []}), "traducoes"),
         (_page({"traducoes": [{**_SUGG, "relevancia": 0}]}), "relevancia"),
     ],
 )

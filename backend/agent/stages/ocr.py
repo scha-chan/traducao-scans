@@ -34,13 +34,25 @@ class OcrStage(Stage):
         img = await loop.run_in_executor(None, Image.open, state.image_path)
         img_rgb = img.convert("RGB")
 
-        for dialogue in state.dialogues:
-            bbox = dialogue.bbox
-            region = img_rgb.crop((bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height))
-            result = await loop.run_in_executor(None, self._provider.ocr_region, region, bbox)
-            dialogue.original = result.original
-            dialogue.lines = result.lines
-            dialogue.orientation = result.orientation
-            dialogue.ocr_confidence = result.ocr_confidence
+        # Processa todas as regiões em uma única chamada de executor para não
+        # bloquear o event loop a cada balão e reduzir overhead de scheduling.
+        dialogues = state.dialogues
+        provider = self._provider
+
+        def _ocr_all() -> list[object]:
+            results: list[object] = []
+            for dialogue in dialogues:
+                bbox = dialogue.bbox
+                region = img_rgb.crop((bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height))
+                results.append(provider.ocr_region(region, bbox))
+            return results
+
+        ocr_results = await loop.run_in_executor(None, _ocr_all)
+
+        for dialogue, result in zip(state.dialogues, ocr_results, strict=False):
+            dialogue.original = result.original  # type: ignore[attr-defined]
+            dialogue.lines = result.lines  # type: ignore[attr-defined]
+            dialogue.orientation = result.orientation  # type: ignore[attr-defined]
+            dialogue.ocr_confidence = result.ocr_confidence  # type: ignore[attr-defined]
 
         return state

@@ -69,8 +69,8 @@ def test_block_ordem_zero() -> None:
 
 
 def test_block_traducoes_vazia() -> None:
-    with pytest.raises(ValidationError):
-        TextBlockExport.model_validate({**_BLOCK, "traducoes": []})
+    b = TextBlockExport.model_validate({**_BLOCK, "traducoes": []})
+    assert b.traducoes == []
 
 
 def test_block_traducoes_mais_de_cinco() -> None:
